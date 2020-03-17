@@ -1,4 +1,4 @@
-**Nvidia AR SDK: API Source Code and Sample A**** pplications**
+**Nvidia AR SDK: API Source Code and Sample Applications**
 
 NVIDIA AR SDK enables real-time modeling and tracking of human faces from video. The SDK is powered by NVIDIA graphics processing units (GPUs) with Tensor Cores, and as a result, the algorithm throughput is greatly accelerated, and latency is reduced.
 
