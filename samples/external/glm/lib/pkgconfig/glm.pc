@@ -1,0 +1,7 @@
+prefix=C:/Users/kturkowski/Projects/NVIDIA/sw/devrel/Playpen/kturkowski/AboutFace/ext/glm
+includedir=${prefix}/include
+
+Name: GLM
+Description: OpenGL Mathematics
+Version: 0.9.8
+Cflags: -I${includedir}
