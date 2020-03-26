@@ -755,6 +755,10 @@ DoApp::Err DoApp::initOfflineMode(const char *inputFilename, const char *outputF
 DoApp::Err DoApp::fitFaceModel() {
   DoApp::Err doErr = errNone;
   nvErr = face_ar_engine.fitFaceModel(frame);
+  if (FLAG_captureOutputs) {
+    writeFrameAndEstResults(frame, face_ar_engine.output_bboxes, face_ar_engine.getLandmarks());
+    writeVideoAndEstResults(frame, face_ar_engine.output_bboxes, face_ar_engine.getLandmarks());
+  }
 
   if (FaceEngine::Err::errNone == nvErr) {
 #ifdef VISUALIZE
