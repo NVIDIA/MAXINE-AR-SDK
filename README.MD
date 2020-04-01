@@ -6,7 +6,9 @@ NVIDIA AR SDK has the following features:
 
 - **Face detection and tracking**, which detects, localizes, and tracks human faces in images or videos by using bounding boxes.
 - **Facial landmark detection and tracking**, which predicts and tracks the pixel locations of human facial landmark points and head poses in images or videos.The detected facial landmarks follow the _Multi-PIE 68 point mark-ups_ information in [facial point annotations](https://ibug.doc.ic.ac.uk/resources/facial-point-annotations/).
-- **Face 3D mesh and tracking**, which reconstructs and tracks a 3D human face and its head pose from the provided facial landmarks **.** NVIDIA AR SDK provides a sample application that demonstrates the features listed above in real time by using a webcam or offline videos.
+- **Face 3D mesh and tracking**, which reconstructs and tracks a 3D human face and its head pose from the provided facial landmarks **.**
+
+NVIDIA AR SDK provides a sample application that demonstrates the features listed above in real time by using a webcam or offline videos.
 
 NVIDIA AR SDK is distributed in the following parts:
 
