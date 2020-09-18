@@ -47,5 +47,4 @@ Either the forward slash (/) or back slash (\) can be used as a separator betwee
 The ConvertSurreyFaceModel.exe file is distributed in the https://github.com/nvidia/BROADCAST-AR-SDK repo.
 
 3) The sample application provided with NVIDIA AR SDK requires that the model file be named face_model0.nvf.
-Place the face_model0.nvf file in the model folder. By default the models folder is your_sdk_install_path/models 
-where all models (including *.trtpkg files) are installed, for example: C:\Program Files\NVIDIA Corporation\NVIDIA AR SDK\models.
+Place the face_model0.nvf file in the /bin/models folder.

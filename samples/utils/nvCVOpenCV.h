@@ -21,9 +21,6 @@
 #
 ###############################################################################*/
 
-#ifndef __NVCVOPENCV_H__
-#define __NVCVOPENCV_H__
-
 #include "nvCVImage.h"
 #include "opencv2/opencv.hpp"
 
@@ -76,5 +73,3 @@ inline void NVWrapperForCVMat(const cv::Mat *cvIm, NvCVImage *nvcvIm) {
   nvcvIm->reserved[0]    = 0;
   nvcvIm->reserved[1]    = 0;
 }
-
-#endif // __NVCVOPENCV_H__

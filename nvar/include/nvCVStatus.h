@@ -61,9 +61,6 @@ typedef enum NvCV_Status {
   NVCV_ERR_FEATURENOTFOUND       = -14,  //!< The requested feature was not found
   NVCV_ERR_MISSINGINPUT          = -15,  //!< A required parameter was not set
   NVCV_ERR_RESOLUTION            = -16,  //!< The specified image resolution is not supported.
-  NVCV_ERR_UNSUPPORTEDGPU        = -17,  //!< The GPU is not supported
-  NVCV_ERR_WRONGGPU              = -18,  //!< The current GPU is not the one selected.
-  NVCV_ERR_UNSUPPORTEDDRIVER     = -19,  //!< The currently installed graphics driver is not supported
 
   NVCV_ERR_CUDA_MEMORY           = -20,  //!< There is not enough CUDA memory for the requested operation.
   NVCV_ERR_CUDA_VALUE            = -21,  //!< A CUDA parameter is not within the acceptable range.

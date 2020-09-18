@@ -23,10 +23,31 @@
 #include "FaceEngine.h"
 #include "RenderingUtils.h"
 
+const char* NvCV_StatusStringFromCode(NvCV_Status code) {
+  struct TabEntry {
+    NvCV_Status code;
+    const char* str;
+  };
+  static const TabEntry lut[] = {
+      {NVCV_SUCCESS, "no error"},
+      {NVCV_ERR_GENERAL, "unspecified failure"},
+      {NVCV_ERR_FEATURENOTFOUND, "Feature not found"},
+      {NVCV_ERR_PARAMETER, "invalid parameter"},
+      {NVCV_ERR_MEMORY, "provided buffer too small"},
+      {NVCV_ERR_INITIALIZATION, "not initialized"},
+      {NVCV_ERR_MISSINGINPUT, "missing input"},
+      {NVCV_ERR_INITIALIZATION, "unable to initialize feature"},
+      {NVCV_ERR_CUDA_MEMORY, "out of GPU memory"},
+      {NVCV_ERR_SELECTOR, "unsupported parameter"},
+  };
+  for (const TabEntry* p = lut; p != &lut[sizeof(lut) / sizeof(lut[0])]; ++p)
+    if (p->code == code) return p->str;
+  return "UNKNOWN ERROR";
+}
 
 bool CheckResult(NvCV_Status nvErr, unsigned line) {
   if (NVCV_SUCCESS == nvErr) return true;
-  std::cout << "ERROR: " << NvCV_GetErrorStringFromCode(nvErr) << ", line " << line << std::endl;
+  std::cout << "ERROR: " << NvCV_StatusStringFromCode(nvErr) << ", line " << line << std::endl;
   return false;
 }
 
@@ -46,7 +67,7 @@ FaceEngine::Err FaceEngine::fitFaceModel(cv::Mat& frame) {
   nvErr = NvAR_Run(faceFitHandle);
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errRun);
 
-  if (getAverageLandmarksConfidence() < confidenceThreshold) return FaceEngine::Err::errRun;
+  if (getAverageLandmarksConfidence() < LANDMARK_CONF_THRESH) return FaceEngine::Err::errRun;
 
 bail:
   return err;
@@ -60,44 +81,30 @@ FaceEngine::Err FaceEngine::createFeatures(const char* modelPath, unsigned int _
   FaceEngine::Err err = FaceEngine::Err::errNone;
 
   NvCV_Status cuErr = NvAR_CudaStreamCreate(&stream);
-  if (NVCV_SUCCESS != cuErr) {
-    printf("Cannot create a cuda stream: %s\n", NvCV_GetErrorStringFromCode(cuErr));
-    return errInitialization;
-  }
-  if (appMode == faceDetection) {
+  if (appMode == faceDetection)
     err = createFaceDetectionFeature(modelPath, stream);
-    if (err != Err::errNone) {
-      printf("ERROR: An error has occured while initializing Face Detection\n");
-    }
-  } else if (appMode == landmarkDetection) {
+  else if (appMode == landmarkDetection)
     err = createLandmarkDetectionFeature(modelPath, _batchSize, stream);
-    if (err != Err::errNone) {
-      printf("ERROR: An error has occured while initializing Landmark Detection\n");
-    }
-  } else if (appMode == faceMeshGeneration) {
+  else if (appMode == faceMeshGeneration)
     err = createFaceFittingFeature(modelPath, stream);
-    if (err != Err::errNone) {
-      printf("ERROR: An error has occured while initializing Face Fitting\n");
-    }
-  }
   return err;
 }
 
-FaceEngine::Err FaceEngine::createFaceDetectionFeature(const char* modelPath, CUstream str) {
+FaceEngine::Err FaceEngine::createFaceDetectionFeature(const char* modelPath, CUstream stream) {
   FaceEngine::Err err = FaceEngine::Err::errNone;
   NvCV_Status nvErr;
 
   nvErr = NvAR_Create(NvAR_Feature_FaceDetection, &faceDetectHandle);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errEffect);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetString(faceDetectHandle, NvAR_Parameter_Config(ModelDir), modelPath);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
-  nvErr = NvAR_SetCudaStream(faceDetectHandle, NvAR_Parameter_Config(CUDAStream), str);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  nvErr = NvAR_SetCudaStream(faceDetectHandle, NvAR_Parameter_Config(CUDAStream), stream);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetU32(faceDetectHandle, NvAR_Parameter_Config(Temporal), bStabilizeFace);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_Load(faceDetectHandle);
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
@@ -107,31 +114,25 @@ bail:
 }
 
 FaceEngine::Err FaceEngine::createLandmarkDetectionFeature(const char* modelPath, unsigned int _batchSize,
-                                                           CUstream str) {
+                                                           CUstream stream) {
   FaceEngine::Err err = FaceEngine::Err::errNone;
   NvCV_Status nvErr;
 
   batchSize = _batchSize;
   nvErr = NvAR_Create(NvAR_Feature_LandmarkDetection, &landmarkDetectHandle);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errEffect);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetString(landmarkDetectHandle, NvAR_Parameter_Config(ModelDir), modelPath);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
-  nvErr = NvAR_SetCudaStream(landmarkDetectHandle, NvAR_Parameter_Config(CUDAStream), str);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  nvErr = NvAR_SetCudaStream(landmarkDetectHandle, NvAR_Parameter_Config(CUDAStream), stream);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(BatchSize), batchSize);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(Temporal), bStabilizeFace);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
-
-  nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(Landmarks_Size), numLandmarks);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
-
-  nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(LandmarksConfidence_Size), numLandmarks);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_Load(landmarkDetectHandle);
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
@@ -140,26 +141,18 @@ bail:
   return err;
 }
 
-FaceEngine::Err FaceEngine::createFaceFittingFeature(const char* modelPath, CUstream str) {
+FaceEngine::Err FaceEngine::createFaceFittingFeature(const char* modelPath, CUstream stream) {
   FaceEngine::Err err = FaceEngine::Err::errNone;
   NvCV_Status nvErr;
 
   nvErr = NvAR_Create(NvAR_Feature_Face3DReconstruction, &faceFitHandle);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errEffect);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetString(faceFitHandle, NvAR_Parameter_Config(ModelDir), modelPath);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
-  nvErr = NvAR_SetCudaStream(faceFitHandle, NvAR_Parameter_Config(CUDAStream), str);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
-
-  nvErr = NvAR_SetU32(faceFitHandle, NvAR_Parameter_Config(Landmarks_Size), numLandmarks);  // TODO: Check if nonzero??
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
-
-  if (!face_model.empty()) {
-    nvErr = NvAR_SetString(faceFitHandle, NvAR_Parameter_Config(ModelName), face_model.c_str());
-    BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
-  }
+  nvErr = NvAR_SetCudaStream(faceFitHandle, NvAR_Parameter_Config(CUDAStream), stream);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_Load(faceFitHandle);
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
@@ -176,64 +169,55 @@ FaceEngine::Err FaceEngine::initFeatureIOParams() {
 
   BAIL_IF_CVERR(cvErr, err, FaceEngine::Err::errInitialization);
 
-  if (appMode == faceDetection) {
+  if (appMode == faceDetection)
     err = initFaceDetectionIOParams(&inputImageBuffer);
-    if (err != Err::errNone) {
-      printf("ERROR: An error has occured while setting input, output parmeters for Face Detection\n");
-    }
-  } else if (appMode == landmarkDetection) {
+  else if (appMode == landmarkDetection)
     err = initLandmarkDetectionIOParams(&inputImageBuffer);
-    if (err != Err::errNone) {
-      printf("ERROR: An error has occured while setting input, output parmeters for Landmark Detection\n");
-    }
-  } else if (appMode == faceMeshGeneration) {
+  else if (appMode == faceMeshGeneration)
     err = initFaceFittingIOParams(&inputImageBuffer);
-    if (err != Err::errNone) {
-      printf("ERROR: An error has occured while setting input, output parmeters for Face Fitting\n");
-    }
-  }
+
   return err;
 
 bail:
   return err;
 }
 
-FaceEngine::Err FaceEngine::initFaceDetectionIOParams(NvCVImage* inBuf) {
+FaceEngine::Err FaceEngine::initFaceDetectionIOParams(NvCVImage* _inputImageBuffer) {
   NvCV_Status nvErr = NVCV_SUCCESS;
   FaceEngine::Err err = FaceEngine::Err::errNone;
 
-  nvErr = NvAR_SetObject(faceDetectHandle, NvAR_Parameter_Input(Image), inBuf, sizeof(NvCVImage));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  nvErr = NvAR_SetObject(faceDetectHandle, NvAR_Parameter_Input(Image), &inputImageBuffer, sizeof(NvCVImage));
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   output_bbox_data.assign(25, {0.f, 0.f, 0.f, 0.f});
   output_bbox_conf_data.assign(25, 0.f);
   output_bboxes.boxes = output_bbox_data.data();
-  output_bboxes.max_boxes = (uint8_t)output_bbox_data.size();
+  output_bboxes.max_boxes = output_bbox_data.size();
   output_bboxes.num_boxes = 0;
   nvErr = NvAR_SetObject(faceDetectHandle, NvAR_Parameter_Output(BoundingBoxes), &output_bboxes, sizeof(NvAR_BBoxes));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetF32Array(faceDetectHandle, NvAR_Parameter_Output(BoundingBoxesConfidence),
                            output_bbox_conf_data.data(), output_bboxes.max_boxes);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
 bail:
   return err;
 }
 
-FaceEngine::Err FaceEngine::initLandmarkDetectionIOParams(NvCVImage* inBuf) {
+FaceEngine::Err FaceEngine::initLandmarkDetectionIOParams(NvCVImage* _inputImageBuffer) {
   NvCV_Status nvErr = NVCV_SUCCESS;
   FaceEngine::Err err = FaceEngine::Err::errNone;
 
-  nvErr = NvAR_SetObject(landmarkDetectHandle, NvAR_Parameter_Input(Image), inBuf, sizeof(NvCVImage));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  nvErr = NvAR_SetObject(landmarkDetectHandle, NvAR_Parameter_Input(Image), &inputImageBuffer, sizeof(NvCVImage));
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   unsigned int OUTPUT_SIZE_KPTS, OUTPUT_SIZE_KPTS_CONF;
   nvErr = NvAR_GetU32(landmarkDetectHandle, NvAR_Parameter_Config(Landmarks_Size), &OUTPUT_SIZE_KPTS);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_GetU32(landmarkDetectHandle, NvAR_Parameter_Config(LandmarksConfidence_Size), &OUTPUT_SIZE_KPTS_CONF);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   facial_landmarks.assign(batchSize * OUTPUT_SIZE_KPTS, {0.f, 0.f});
   facial_pose.assign(batchSize, {0.f, 0.f, 0.f, 0.f});
@@ -241,78 +225,74 @@ FaceEngine::Err FaceEngine::initLandmarkDetectionIOParams(NvCVImage* inBuf) {
 
   nvErr = NvAR_SetObject(landmarkDetectHandle, NvAR_Parameter_Output(Landmarks), facial_landmarks.data(),
                          sizeof(NvAR_Point2f));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr =
       NvAR_SetObject(landmarkDetectHandle, NvAR_Parameter_Output(Pose), facial_pose.data(), sizeof(NvAR_Quaternion));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetF32Array(landmarkDetectHandle, NvAR_Parameter_Output(LandmarksConfidence),
                            facial_landmarks_confidence.data(), batchSize * OUTPUT_SIZE_KPTS);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   uint output_bbox_size = batchSize;
   if (!bStabilizeFace) output_bbox_size = 25;
   output_bbox_data.assign(output_bbox_size, {0.f, 0.f, 0.f, 0.f});
   output_bboxes.boxes = output_bbox_data.data();
-  output_bboxes.max_boxes = (uint8_t)output_bbox_size;
-  output_bboxes.num_boxes = (uint8_t)output_bbox_size;
+  output_bboxes.max_boxes = output_bbox_size;
+  output_bboxes.num_boxes = output_bbox_size;
   nvErr =
       NvAR_SetObject(landmarkDetectHandle, NvAR_Parameter_Output(BoundingBoxes), &output_bboxes, sizeof(NvAR_BBoxes));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
 bail:
   return err;
 }
 
-FaceEngine::Err FaceEngine::initFaceFittingIOParams(NvCVImage* inBuf) {
+FaceEngine::Err FaceEngine::initFaceFittingIOParams(NvCVImage* inputImageBuffer) {
   NvCV_Status nvErr = NVCV_SUCCESS;
   FaceEngine::Err err = FaceEngine::Err::errNone;
 
   face_mesh = new NvAR_FaceMesh();
-  face_mesh->vertices = nullptr;  //new NvAR_Vector3f[FACE_MODEL_NUM_VERTICES];
-  face_mesh->tvi = nullptr;       // new NvAR_Vector3u16[FACE_MODEL_NUM_INDICES];
+  face_mesh->vertices = new NvAR_Vector3f[FACE_MODEL_NUM_VERTICES];
+  face_mesh->tvi = new NvAR_Vector3u16[FACE_MODEL_NUM_INDICES];
   rendering_params = new NvAR_RenderingParams();
 
-  nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Input(Image), inBuf, sizeof(NvCVImage));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Input(Image), inputImageBuffer, sizeof(NvCVImage));
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetS32(faceFitHandle, NvAR_Parameter_Input(Width), input_image_width);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetS32(faceFitHandle, NvAR_Parameter_Input(Height), input_image_height);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   unsigned int OUTPUT_SIZE_KPTS;
   nvErr = NvAR_GetU32(faceFitHandle, NvAR_Parameter_Config(Landmarks_Size), &OUTPUT_SIZE_KPTS);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   facial_landmarks.assign(batchSize * OUTPUT_SIZE_KPTS, {0.f, 0.f});
   nvErr =
       NvAR_SetObject(faceFitHandle, NvAR_Parameter_Output(Landmarks), facial_landmarks.data(), sizeof(NvAR_Point2f));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   facial_landmarks_confidence.assign(batchSize * OUTPUT_SIZE_KPTS, 0.f);
   nvErr = NvAR_SetF32Array(faceFitHandle, NvAR_Parameter_Output(LandmarksConfidence),
                            facial_landmarks_confidence.data(), batchSize * OUTPUT_SIZE_KPTS);
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
-
-  facial_pose.assign(batchSize, {0.f, 0.f, 0.f, 0.f});
-  nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Output(Pose), facial_pose.data(), sizeof(NvAR_Quaternion));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   output_bbox_data.assign(batchSize, {0.f, 0.f, 0.f, 0.f});
   output_bboxes.boxes = output_bbox_data.data();
-  output_bboxes.max_boxes = (uint8_t)batchSize;
-  output_bboxes.num_boxes = (uint8_t)batchSize;
+  output_bboxes.max_boxes = batchSize;
+  output_bboxes.num_boxes = batchSize;
   nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Output(BoundingBoxes), &output_bboxes, sizeof(NvAR_BBoxes));
 
   nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Output(FaceMesh), face_mesh, sizeof(NvAR_FaceMesh));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
   nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Output(RenderingParams), rendering_params,
                          sizeof(NvAR_RenderingParams));
-  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
+  BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errInitialization);
 
 bail:
   return err;
@@ -372,7 +352,6 @@ void FaceEngine::releaseFaceFittingIOParams() {
   if (!output_bbox_data.empty()) output_bbox_data.clear();
   if (!facial_landmarks.empty()) facial_landmarks.clear();
   if (!facial_landmarks_confidence.empty()) facial_landmarks_confidence.clear();
-  if (!facial_pose.empty()) facial_pose.clear();
   NvCVImage_Dealloc(&inputImageBuffer);
   if (rendering_params) {
     delete rendering_params;
@@ -482,7 +461,6 @@ void FaceEngine::jiggleBox(std::mt19937& ran, float minMag, float maxMag, const 
 #endif   // None of these makes a significant difference
 }
 
-#ifdef UNUSED
 /** Intersect a rectangle with an image.
  * @param[in]   srcRect   the source rectangle.
  * @param[in]   src       the source image.
@@ -515,7 +493,6 @@ static bool IntersectRectWithImage(const cv::Rect& srcRect, const cv::Mat& src, 
   clipRect.height = rect[1].y - rect[0].y;
   return result;
 }
-#endif // UNUSED
 
 void FaceEngine::DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose) {
   float R[3][3];
@@ -528,19 +505,17 @@ void FaceEngine::DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose) {
   float x3 = radius * R[1][2] * -1.f;
   float y3 = radius * R[2][2] * -1.f;
 
-  int nose_tip = 0;
-  const char* kNoseTipName = "nose-tip";
-  nose_tip = FindLandmarkIndexFromName(numLandmarks, kNoseTipName);
-
+  // 30th point is the tip of the nose
+  const int nose_tip = 30;
   int width = src.cols;
   int height = src.rows;
   NvAR_Point2f cxy = *(facial_landmarks.data() + nose_tip);
-  float cx1 = (float)std::min(std::max(0, int(cxy.x + x1)), width - 1);
-  float cy1 = (float)std::min(std::max(0, int(cxy.y + y1)), height - 1);
-  float cx2 = (float)std::min(std::max(0, int(cxy.x + x2)), width - 1);
-  float cy2 = (float)std::min(std::max(0, int(cxy.y + y2)), height - 1);
-  float cx3 = (float)std::min(std::max(0, int(cxy.x + x3)), width - 1);
-  float cy3 = (float)std::min(std::max(0, int(cxy.y + y3)), height - 1);
+  float cx1 = std::min(std::max(0, int(cxy.x + x1)), width - 1);
+  float cy1 = std::min(std::max(0, int(cxy.y + y1)), height - 1);
+  float cx2 = std::min(std::max(0, int(cxy.x + x2)), width - 1);
+  float cy2 = std::min(std::max(0, int(cxy.y + y2)), height - 1);
+  float cx3 = std::min(std::max(0, int(cxy.x + x3)), width - 1);
+  float cy3 = std::min(std::max(0, int(cxy.y + y3)), height - 1);
 
   cv::line(src, cv::Point((int)cxy.x, (int)cxy.y), cv::Point((int)cx1, (int)cy1), cv::Scalar(0, 0, 255), 2);
   cv::line(src, cv::Point((int)cxy.x, (int)cxy.y), cv::Point((int)cx2, (int)cy2), cv::Scalar(0, 255, 0), 2);
@@ -555,16 +530,16 @@ NvCV_Status FaceEngine::findLandmarks() {
     return nvErr;
   }
 
-  if (getAverageLandmarksConfidence() < confidenceThreshold) {
+  if (getAverageLandmarksConfidence() < LANDMARK_CONF_THRESH) {
     return NVCV_ERR_GENERAL;
   } else {
     average_poses(getPose(), batchSize);
     NvAR_Point2f *pt, *endPt;
     int i = 0;
-    for (endPt = (pt = getLandmarks()) + numLandmarks; pt != endPt; ++pt, i += 2) {
+    for (endPt = (pt = getLandmarks()) + NUM_LANDMARKS; pt != endPt; ++pt, i += 2) {
       for (int j = 1; j < batchSize; j++) {
-        pt->x += pt[j * numLandmarks].x;
-        pt->y += pt[j * numLandmarks].y;
+        pt->x += pt[j * NUM_LANDMARKS].x;
+        pt->y += pt[j * NUM_LANDMARKS].y;
       }
       // average batch of inferences to generate final result landmark points
       pt->x /= batchSize;
@@ -582,11 +557,11 @@ float FaceEngine::getAverageLandmarksConfidence() {
   float average_confidence = 0.0f;
   float* keypoints_landmarks_confidence = getLandmarksConfidence();
   for (int i = 0; i < batchSize; i++) {
-    for (int j = 0; j < numLandmarks; j++) {
-      average_confidence += keypoints_landmarks_confidence[i * numLandmarks + j];
+    for (int j = 0; j < NUM_LANDMARKS; j++) {
+      average_confidence += keypoints_landmarks_confidence[i * NUM_LANDMARKS + j];
     }
   }
-  average_confidence /= batchSize * numLandmarks;
+  average_confidence /= batchSize * NUM_LANDMARKS;
   return average_confidence;
 }
 
@@ -623,7 +598,7 @@ unsigned FaceEngine::acquireFaceBox(cv::Mat& src, NvAR_Rect& faceBox, int varian
   return n;
 }
 
-unsigned FaceEngine::acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int /*variant*/) {
+unsigned FaceEngine::acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int variant) {
   unsigned n = 0;
   NvCVImage fxSrcChunkyCPU;
   (void)NVWrapperForCVMat(&src, &fxSrcChunkyCPU);
@@ -636,24 +611,11 @@ unsigned FaceEngine::acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refM
   if (findLandmarks() != NVCV_SUCCESS) return 0;
   faceBox = output_bboxes.boxes[0];
   n = 1;
-  memcpy(refMarks, getLandmarks(), sizeof(NvAR_Point2f) * numLandmarks);
+  memcpy(refMarks, getLandmarks(), sizeof(NvAR_Point2f) * FaceEngine::NUM_LANDMARKS);
 
   return n;
 }
 
 void FaceEngine::setFaceStabilization(bool _bStabilizeFace) { bStabilizeFace = _bStabilizeFace; }
-
-FaceEngine::Err FaceEngine::setNumLandmarks(int n) {
-  FaceEngine::Err err = errNone;
-  for (auto const& info : LANDMARKS_INFO) {
-    if (n == info.numPoints) {
-      numLandmarks = info.numPoints;
-      confidenceThreshold = info.confidence_threshold;
-      return err;
-    }
-  }
-  err = errGeneral;
-  return err;
-}
 
 void FaceEngine::setAppMode(FaceEngine::mode _mode) { appMode = _mode; }

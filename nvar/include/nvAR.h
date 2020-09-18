@@ -38,13 +38,6 @@ typedef struct CUstream_st *CUstream;
 typedef struct nvAR_Feature nvAR_Feature;
 typedef struct nvAR_Feature *NvAR_FeatureHandle;
 
-//! Get the SDK version
-//! \param[in,out]  version    Pointer to an unsigned int set to 
-//!                            (major << 24) | (minor << 16) | (build << 8) | 0
-//! \return         NVCV_SUCCESS  if the version was set
-//! \return         NVCV_ERR_PARAMETER  if version was NULL
-NvCV_Status NvAR_API NvAR_GetVersion(unsigned int *version);
-
 //! Create a new feature instantiation.
 //! \param[in]  InFeatureID The selector code for the desired feature.
 //! \param[out] handle      Handle to the feature instance.
@@ -97,7 +90,7 @@ NvCV_Status NvAR_API NvAR_GetObject(NvAR_FeatureHandle handle, const char *name,
                                     unsigned long typeSize);
 NvCV_Status NvAR_API NvAR_GetString(NvAR_FeatureHandle handle, const char *name, const char **str);
 NvCV_Status NvAR_API NvAR_GetCudaStream(NvAR_FeatureHandle handle, const char *name, const CUstream *stream);
-NvCV_Status NvAR_API NvAR_GetF32Array(NvAR_FeatureHandle handle, const char *name, const float **vals, int* /*count*/);
+NvCV_Status NvAR_API NvAR_GetF32Array(NvAR_FeatureHandle handle, const char *name, const float **vals, int */*count*/);
 
 #ifdef __cplusplus
 }

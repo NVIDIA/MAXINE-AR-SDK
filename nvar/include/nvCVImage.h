@@ -63,7 +63,7 @@ typedef enum NvCVImage_ComponentType {
 } NvCVImage_ComponentType;
 
 
-//! Value for the planar field or layout argument. Two values are currently accommodated for RGB:
+//! Value for the planar field or isPlanar argument. Two values are currently accommodated for RGB:
 //! Interleaved or chunky storage locates all components of a pixel adjacent in memory,
 //! e.g. RGBRGBRGB... (denoted [RGB]).
 //! Planar storage locates the same component of all pixels adjacent in memory,
@@ -104,11 +104,12 @@ typedef enum NvCVImage_ComponentType {
 #define NVCV_CHROMA_MPEG2      NVCV_CHROMA_COSITED
 #define NVCV_CHROMA_MPEG1      NVCV_CHROMA_INTSTITIAL
 
-//! This is the value for the gpuMem field or the memSpace argument.
+//! This is the value for the gpuMem field or the onGPU argument. Two values are currently accommodated:
+//! CPU indicates standard CPU memory.
+//! GPU indicates CUDA buffers.
 #define NVCV_CPU         0   //!< The buffer is stored in CPU memory.
 #define NVCV_GPU         1   //!< The buffer is stored in CUDA memory.
 #define NVCV_CUDA        1   //!< The buffer is stored in CUDA memory.
-#define NVCV_CPU_PINNED   2   //!< The buffer is stored in pinned CPU memory.
 
 //! Image descriptor.
 typedef struct
@@ -124,8 +125,8 @@ NvCVImage {
   unsigned char             pixelBytes;             //!< The number of bytes in a chunky pixel.
   unsigned char             componentBytes;         //!< The number of bytes in each pixel component.
   unsigned char             numComponents;          //!< The number of components in each pixel.
-  unsigned char             planar;                 //!< NVCV_CHUNKY, NVCV_PLANAR, NVCV_UYVY, ....
-  unsigned char             gpuMem;                 //!< NVCV_CPU, NVCV_CPU_PINNED, NVCV_CUDA, NVCV_GPU
+  unsigned char             planar;                 //!< 0=chunky, 1=planar, 2=semi-planar (NV12, NV21).
+  unsigned char             gpuMem;                 //!< 0=cpu mem, 1=cuda mem,
   unsigned char             colorspace;             //!< an OR of colorspace, range and chroma phase.
   unsigned char             reserved[2];            //!< For structure padding and future expansion. Set to 0.
   void                      *pixels;                //!< Pointer to pixel(0,0) in the image.
@@ -144,14 +145,14 @@ NvCVImage {
   //! \param[in]  height    the number of pixels vertically.
   //! \param[in]  format    the format of the pixels.
   //! \param[in]  type      the type of each pixel component.
-  //! \param[in]  layout    One of { NVCV_CHUNKY, NVCV_PLANAR } or one of the YUV layouts.
-  //! \param[in]  memSpace  One of { NVCV_CPU, NVCV_CPU_PINNED, NVCV_GPU, NVCV_CUDA }
+  //! \param[in]  isPlanar  One of { NVCV_CHUNKY, NVCV_PLANAR }.
+  //! \param[in]  onGPU     One of { NVCV_CPU,    NVCV_GPU }
   //! \param[in]  alignment row byte alignment. Choose 0 or a power of 2.
   //!                       1: yields no gap whatsoever between scanlines;
   //!                       0: default alignment: 4 on CPU, and cudaMallocPitch's choice on GPU.
   //!                       Other common values are 16 or 32 for cache line size.
   inline NvCVImage(unsigned width, unsigned height, NvCVImage_PixelFormat format, NvCVImage_ComponentType type,
-          unsigned layout = NVCV_CHUNKY, unsigned memSpace = NVCV_CPU, unsigned alignment = 0);
+          unsigned isPlanar = 0, unsigned onGPU = 0, unsigned alignment = 0);
 
   //! Subimage constructor.
   //! \param[in]  fullImg   the full image, from which this subImage view is to be created.
@@ -205,12 +206,12 @@ NvCVImage {
 //! \param[in]      pixels    a pointer to the pixel buffer.
 //! \param[in]      format    the format of the pixels.
 //! \param[in]      type      the type of the components of the pixels.
-//! \param[in]      layout    One of { NVCV_CHUNKY, NVCV_PLANAR } or one of the YUV layouts.
-//! \param[in]      memSpace  Location of the buffer: one of { NVCV_CPU, NVCV_CPU_PINNED, NVCV_GPU, NVCV_CUDA }
+//! \param[in]      isPlanar  One of { NVCV_CHUNKY, NVCV_PLANAR }.
+//! \param[in]      onGPU     Location of the buffer: one of { NVCV_CPU, NVCV_GPU }
 //! \return NVCV_SUCCESS         if successful
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not yet accommodated.
 NvCV_Status NvCV_API NvCVImage_Init(NvCVImage *im, unsigned width, unsigned height, int pitch, void *pixels,
-  NvCVImage_PixelFormat format, NvCVImage_ComponentType type, unsigned layout, unsigned memSpace);
+  NvCVImage_PixelFormat format, NvCVImage_ComponentType type, unsigned isPlanar, unsigned onGPU);
 
 
 //! Initialize a view into a subset of an existing image.
@@ -233,8 +234,8 @@ void NvCV_API NvCVImage_InitView(NvCVImage *subImg, NvCVImage *fullImg, int x, i
 //! \param[in]      height    the desired height of the image, in pixels.
 //! \param[in]      format    the format of the pixels.
 //! \param[in]      type      the type of the components of the pixels.
-//! \param[in]      layout    One of { NVCV_CHUNKY, NVCV_PLANAR } or one of the YUV layouts.
-//! \param[in]      memSpace  Location of the buffer: one of { NVCV_CPU, NVCV_CPU_PINNED, NVCV_GPU, NVCV_CUDA }
+//! \param[in]      isPlanar  One of { NVCV_CHUNKY, NVCV_PLANAR }.
+//! \param[in]      onGPU     Location of the buffer: one of { NVCV_CPU, NVCV_GPU }
 //! \param[in]      alignment row byte alignment. Choose 0 or a power of 2.
 //!                           1: yields no gap whatsoever between scanlines;
 //!                           0: default alignment: 4 on CPU, and cudaMallocPitch's choice on GPU.
@@ -243,7 +244,7 @@ void NvCV_API NvCVImage_InitView(NvCVImage *subImg, NvCVImage *fullImg, int x, i
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
 //! \return NVCV_ERR_MEMORY      if there is not enough memory to allocate the buffer.
 NvCV_Status NvCV_API NvCVImage_Alloc(NvCVImage *im, unsigned width, unsigned height, NvCVImage_PixelFormat format,
-  NvCVImage_ComponentType type, unsigned layout, unsigned memSpace, unsigned alignment);
+  NvCVImage_ComponentType type, unsigned isPlanar, unsigned onGPU, unsigned alignment);
 
 
 //! Reallocate memory for, and initialize an image. This assumes that the image is valid.
@@ -254,8 +255,8 @@ NvCV_Status NvCV_API NvCVImage_Alloc(NvCVImage *im, unsigned width, unsigned hei
 //! \param[in]      height    the desired height of the image, in pixels.
 //! \param[in]      format    the format of the pixels.
 //! \param[in]      type      the type of the components of the pixels.
-//! \param[in]      layout    One of { NVCV_CHUNKY, NVCV_PLANAR } or one of the YUV layouts.
-//! \param[in]      memSpace  Location of the buffer: one of { NVCV_CPU, NVCV_CPU_PINNED, NVCV_GPU, NVCV_CUDA }
+//! \param[in]      isPlanar  One of { NVCV_CHUNKY, NVCV_PLANAR }.
+//! \param[in]      onGPU     Location of the buffer: one of { NVCV_CPU, NVCV_GPU }
 //! \param[in]      alignment row byte alignment. Choose 0 or a power of 2.
 //!                           1: yields no gap whatsoever between scanlines;
 //!                           0: default alignment: 4 on CPU, and cudaMallocPitch's choice on GPU.
@@ -264,7 +265,7 @@ NvCV_Status NvCV_API NvCVImage_Alloc(NvCVImage *im, unsigned width, unsigned hei
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
 //! \return NVCV_ERR_MEMORY      if there is not enough memory to allocate the buffer.
 NvCV_Status NvCV_API NvCVImage_Realloc(NvCVImage *im, unsigned width, unsigned height, NvCVImage_PixelFormat format,
-  NvCVImage_ComponentType type, unsigned layout, unsigned memSpace, unsigned alignment);
+  NvCVImage_ComponentType type, unsigned isPlanar, unsigned onGPU, unsigned alignment);
 
 
 //! Deallocate the image buffer from the image. The image is not deallocated.
@@ -277,8 +278,8 @@ void NvCV_API NvCVImage_Dealloc(NvCVImage *im);
 //! \param[in]      height    the desired height of the image, in pixels.
 //! \param[in]      format    the format of the pixels.
 //! \param[in]      type      the type of the components of the pixels.
-//! \param[in]      layout    One of { NVCV_CHUNKY, NVCV_PLANAR } or one of the YUV layouts.
-//! \param[in]      memSpace  Location of the buffer: one of { NVCV_CPU, NVCV_CPU_PINNED, NVCV_GPU, NVCV_CUDA }
+//! \param[in]      isPlanar  One of { NVCV_CHUNKY, NVCV_PLANAR }.
+//! \param[in]      onGPU     Location of the buffer: one of { NVCV_CPU, NVCV_GPU }
 //! \param[in]      alignment row byte alignment. Choose 0 or a power of 2.
 //!                           1: yields no gap whatsoever between scanlines;
 //!                           0: default alignment: 4 on CPU, and cudaMallocPitch's choice on GPU.
@@ -288,7 +289,7 @@ void NvCV_API NvCVImage_Dealloc(NvCVImage *im);
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
 //! \return NVCV_ERR_MEMORY      if there is not enough memory to allocate the buffer.
 NvCV_Status NvCV_API NvCVImage_Create(unsigned width, unsigned height, NvCVImage_PixelFormat format,
-  NvCVImage_ComponentType type, unsigned layout, unsigned memSpace, unsigned alignment, NvCVImage **out);
+  NvCVImage_ComponentType type, unsigned isPlanar, unsigned onGPU, unsigned alignment, NvCVImage **out);
 
 
 //! Deallocate the image allocated with NvCVImage_Create() (C-style destructor).
@@ -307,38 +308,22 @@ void NvCV_API NvCVImage_ComponentOffsets(NvCVImage_PixelFormat format, int *rOff
 
 
 //! Transfer one image to another, with a limited set of conversions.
-//!
 //! If any of the images resides on the GPU, it may run asynchronously,
 //! so cudaStreamSynchronize() should be called if it is necessary to run synchronously.
-//! The following table indicates the currently-implemented conversions:
-//!    +------------------+-------------+-------------+-------------+-------------+
-//!    |                  |  u8 --> u8  |  u8 --> f32 | f32 --> u8  | f32 --> f32 |
-//!    +------------------+-------------+-------------+-------------+-------------+
-//!    | Y      -- > Y    |      X      |             |      X      |      X      |
-//!    | Y      -- > A    |      X      |             |      X      |      X      |
-//!    | Y      -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | Y      -- > RGBA |      X      |      X      |      X      |      X      |
-//!    | A      -- > Y    |      X      |             |      X      |      X      |
-//!    | A      -- > A    |      X      |             |      X      |      X      |
-//!    | A      -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | A      -- > RGBA |      X      |             |             |             |
-//!    | RGB    -- > Y    |      X      |      X      |             |             |
-//!    | RGB    -- > A    |      X      |      X      |             |             |
-//!    | RGB    -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | RGB    -- > RGBA |      X      |      X      |      X      |      X      |
-//!    | RGBA   -- > Y    |      X      |      X      |             |             |
-//!    | RGBA   -- > A    |             |      X      |             |             |
-//!    | RGBA   -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | RGBA   -- > RGBA |      X      |             |             |             |
-//!    | YUV420 -- > RGB  |      X      |             |             |             |
-//!    | YUV422 -- > RGB  |      X      |             |             |             |
-//!    +------------------+-------------+-------------+-------------+-------------+
-//! where
-//! * Either source or destination can be CHUNKY or PLANAR.
-//! * Either source or destination can reside on the CPU or the GPU.
-//! * The RGB components are in any order (i.e. RGB or BGR; RGBA or BGRA).
-//! * YUV requires that the colorspace field be set manually prior to Transfer.
-//! * Additionally, when the src and dst formats are the same, all formats are accommodated on CPU and GPU,
+//! Conversions are between
+//!   - RGBu8   --> RGBu8,    where the RGB components are in any order;
+//!   - RGBu8  <--> RGBf32,   where the RGB components are in any order (e.g. BGR, RGB);
+//!   - RGBu8   --> GRAYf32,  where the RGB components are in any order;
+//!   - RGBf32  --> RGBAu8,   setting A=255, where the RGB and RGBA components are in any order;
+//!   - RGBAu8  --> RGBu8,    by removing the alpha component;
+//!   - GRAYf32 --> GRAYu8;
+//!   - GRAYu8  --> GRAYu8,   where the RGB components are in any order (also works with ALPHAu8);
+//!   - ALPHAu8 --> RGBAu8,   (insertion) without touching the RGB components.
+//!   - GRAYu8  --> RGBu8,    by replicating gray into all RGB components.
+//!   - YUVu8   --> RGBu8,    though colorspace field needs to be set manually prior to calling.
+//!   - chunky <--> planar;
+//!   - CPU    <--> GPU;
+//! Additionally, when the src and dst formats are the same, all formats are accommodated on CPU and GPU,
 //! and this can be used as a replacement for cudaMemcpy2DAsync() (which it utilizes).
 //!
 //! When there is some kind of conversion AND the src and dst reside on different processors (CPU, GPU),
@@ -369,15 +354,14 @@ NvCV_Status NvCV_API NvCVImage_Transfer(
 
 
 //! Composite one BGRu8 source image over another using the given matte.
-//! \param[in]  fg      the foreground source BGRu8 (or RGBu8) image.
-//! \param[in]  bg      the background source BGRu8 (or RGBu8) image.
+//! \param[in]  src     the source BGRu8 (or RGBu8) image.
 //! \param[in]  mat     the matte  Yu8   (or Au8)   image, indicating where the src should come through.
-//! \param[out] dst     the destination BGRu8 (or RGBu8) image. This can be the same as fg or bg.
+//! \param[out] dst     the destination BGRu8 (or RGBu8) image.
 //! \return NVCV_SUCCESS         if the operation was successful.
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
-//! \bug    This is only implemented for 3-component u8 fg, bg and dst, and 1-component u8 mat,
+//! \bug    This is only implemented for 3-component u8 src and dst, and 1-component mat,
 //!         where all images are resident on the CPU.
-NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *bg, const NvCVImage *mat, NvCVImage *dst);
+NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *src, const NvCVImage *mat, NvCVImage *dst);
 
 
 //! Composite a BGRu8 source image over a constant color field using the given matte.
@@ -439,9 +423,9 @@ NvCVImage::NvCVImage() {
  ********************************************************************************/
 
 NvCVImage::NvCVImage(unsigned width, unsigned height, NvCVImage_PixelFormat format, NvCVImage_ComponentType type,
-                       unsigned layout, unsigned memSpace, unsigned alignment) {
+                       unsigned isPlanar, unsigned onGPU, unsigned alignment) {
   pixels = nullptr;
-  (void)NvCVImage_Alloc(this, width, height, format, type, layout, memSpace, alignment);
+  (void)NvCVImage_Alloc(this, width, height, format, type, isPlanar, onGPU, alignment);
 }
 
 /********************************************************************************
