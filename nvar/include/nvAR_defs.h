@@ -136,12 +136,18 @@ NvAR_Parameter_Output(Pose) - OPTIONAL
 NvAR_Parameter_Output(LandmarksConfidence) - OPTIONAL
 
 *******NvAR_Feature_Face3DReconstruction*******
-Config
+Config:
 NvAR_Parameter_Config(FeatureDescription)
 NvAR_Parameter_Config(ModelDir)
 NvAR_Parameter_Config(Landmarks_Size)
 NvAR_Parameter_Config(CUDAStream) -OPTIONAL
 NvAR_Parameter_Config(Temporal) - OPTIONAL
+NvAR_Parameter_Config(ModelName) - OPTIONAL
+NvAR_Parameter_Config(GPU) - OPTIONAL
+NvAR_Parameter_Config(VertexCount) - QUERY
+NvAR_Parameter_Config(TriangleCount) - QUERY
+NvAR_Parameter_Config(ExpressionCount) - QUERY
+NvAR_Parameter_Config(ShapeEigenValueCount) - QUERY
 
 Input:
 NvAR_Parameter_Input(Width)
@@ -157,6 +163,8 @@ NvAR_Parameter_Output(BoundingBoxesConfidence) - OPTIONAL
 NvAR_Parameter_Output(Landmarks) - OPTIONAL
 NvAR_Parameter_Output(Pose) - OPTIONAL
 NvAR_Parameter_Output(LandmarksConfidence) - OPTIONAL
+NvAR_Parameter_Output(ExpressionCoefficients) - OPTIONAL
+NvAR_Parameter_Output(ShapeEigenValues) - OPTIONAL
 */
 
 #endif  // NvAR_DEFS_H
