@@ -11,9 +11,9 @@ NVIDIA AR SDK has the following features:
 
 <table width="100%" border="0" cellspacing="0" cellpadding="0">
  <tr>    
-  <td><img src="https://developer.nvidia.com/sites/default/files/akamai/gameworks/nv_broadcast/arsdk_001.png" alt="Face detection and tracking" width="320" height="180"/></td>
-  <td><img src="https://developer.nvidia.com/sites/default/files/akamai/gameworks/nv_broadcast/arsdk_002.png" alt="Facial landmark detection and tracking" width="320" height="180"/></td>
-  <td><img src="https://developer.nvidia.com/sites/default/files/akamai/gameworks/nv_broadcast/arsdk_003.png" alt="Face 3D mesh and tracking" width="320" height="180"/></td>
+  <td><img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_001.png" alt="Face detection and tracking" width="320" height="180"/></td>
+  <td><img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_002.png" alt="Facial landmark detection and tracking" width="320" height="180"/></td>
+  <td><img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_003.png" alt="Face 3D mesh and tracking" width="320" height="180"/></td>
  </tr>
  <tr>
    <td align="center">Face detection and tracking</td>
