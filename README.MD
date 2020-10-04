@@ -9,18 +9,11 @@ NVIDIA AR SDK has the following features:
 - **Facial landmark detection and tracking**, which predicts and tracks the pixel locations of human facial landmark points and head poses in images or videos. It can predict 68 and 126 landmark points. The 68 detected facial landmarks follow the _Multi-PIE 68 point mark-ups_ information in [facial point annotations](https://ibug.doc.ic.ac.uk/resources/facial-point-annotations/). The 126 landmark points detector can predict more points on the cheeks, the eyes, and on laugh lines.
 - **Face 3D mesh and tracking**, which reconstructs and tracks a 3D human face and its head pose from the provided facial landmarks.
 
-<table width="100%" border="0" cellspacing="0" cellpadding="0">
- <tr>    
-  <td><img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_001.png" alt="Face detection and tracking" width="320" height="180"/></td>
-  <td><img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_002.png" alt="Facial landmark detection and tracking" width="320" height="180"/></td>
-  <td><img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_003.png" alt="Face 3D mesh and tracking" width="320" height="180"/></td>
- </tr>
- <tr>
-   <td align="center">Face detection and tracking</td>
-   <td align="center">Facial landmark detection and tracking</td>
-   <td align="center">Face 3D mesh and tracking</td>
- </tr>
-</table>
+<div>
+<img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_001.png" alt="Face detection and tracking" width="320" height="180"/>
+<img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_002.png" alt="Facial landmark detection and tracking" width="320" height="180"/>
+<img src="https://github.com/NVIDIA/BROADCAST-AR-SDK/blob/jdsouza-dev/resources/ar_003.png" alt="Face 3D mesh and tracking" width="320" height="180"/>
+</div>
 
 NVIDIA AR SDK provides a sample application that demonstrates the features listed above in real time by using a webcam or offline videos.
 
