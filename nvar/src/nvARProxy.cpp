@@ -62,7 +62,7 @@ inline int nvFreeLibrary(HINSTANCE handle) {
 
 HINSTANCE getNvARLib() {
 
-  TCHAR path[MAX_PATH], fullPath[2*MAX_PATH];
+  TCHAR path[MAX_PATH], fullPath[MAX_PATH];
 
   // There can be multiple apps on the system,
   // some might include the SDK in the app package and
@@ -78,6 +78,13 @@ HINSTANCE getNvARLib() {
   }
   static const HINSTANCE NvArLib = nvLoadLibrary("nvARPose");
   return NvArLib;
+}
+
+NvCV_Status NvAR_API NvAR_GetVersion(unsigned int* version) {
+  static const auto funcPtr = (decltype(NvAR_GetVersion)*)nvGetProcAddress(getNvARLib(), "NvAR_GetVersion");
+
+  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
+  return funcPtr(version);
 }
 
 NvCV_Status NvAR_API NvCVImage_Init(NvCVImage* im, unsigned width, unsigned height, int pitch, void* pixels,
@@ -150,11 +157,11 @@ NvCV_Status NvAR_API NvCVImage_Transfer(const NvCVImage* src, NvCVImage* dst, fl
   return funcPtr(src, dst, scale, stream, tmp);
 }
 
-NvCV_Status NvAR_API NvCVImage_Composite(const NvCVImage* src, const NvCVImage* mat, NvCVImage* dst) {
+NvCV_Status NvAR_API NvCVImage_Composite(const NvCVImage* fg, const NvCVImage* bg, const NvCVImage* mat, NvCVImage* dst) {
   static const auto funcPtr = (decltype(NvCVImage_Composite)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Composite");
 
   if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(src, mat, dst);
+  return funcPtr(fg, bg, mat, dst);
 }
 
 NvCV_Status NvAR_API NvCVImage_CompositeOverConstant(const NvCVImage* src, const NvCVImage* mat,
@@ -307,7 +314,7 @@ NvCV_Status NvAR_API NvAR_GetCudaStream(NvAR_FeatureHandle handle, const char* n
 }
 
 NvCV_Status NvAR_API NvAR_GetF32Array(NvAR_FeatureHandle handle, const char* name, const float** vals, int* count) {
-  static const auto funcPtr = (decltype(NvAR_GetF32Array)*)nvGetProcAddress(getNvARLib(), "NvAR_GetCNvAR_GetF32ArrayudaStream");
+  static const auto funcPtr = (decltype(NvAR_GetF32Array)*)nvGetProcAddress(getNvARLib(), "NvAR_GetF32Array");
 
   if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
   return funcPtr(handle, name, vals, count);

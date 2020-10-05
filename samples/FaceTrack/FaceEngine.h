@@ -27,6 +27,7 @@
 #include "nvAR.h"
 #include "nvCVOpenCV.h"
 #include "opencv2/opencv.hpp"
+#include "FeatureVertexName.h"
 #define FITFACE_PRIVATE
 
 class KalmanFilter1D {
@@ -78,9 +79,14 @@ class KalmanFilter1D {
   }
 };
 
-const char* NvCV_StatusStringFromCode(NvCV_Status code);
-
 bool CheckResult(NvCV_Status nvErr, unsigned line);
+
+#define BAIL_IF_ERR(err)                 \
+do {                                     \
+    if (0!=err) {                        \
+      goto bail;                         \
+    }                                    \
+  } while (0)
 
 #define BAIL_IF_CVERR(nvErr, err, code)  \
   do {                                   \
@@ -90,23 +96,30 @@ bool CheckResult(NvCV_Status nvErr, unsigned line);
     }                                    \
   } while (0)
 
+typedef struct LandmarksProperties {
+  int numPoints;
+  float confidence_threshold;
+}LandmarksProperties;
+
 /********************************************************************************
  * FaceEngine
  ********************************************************************************/
 
 class FaceEngine {
  public:
-  enum Err { errNone, errGeneral, errRun, errInitialization, errRead };
+  enum Err { errNone, errGeneral, errRun, errInitialization, errRead, errEffect, errParameter };
   int input_image_width, input_image_height, input_image_pitch;
-  static const int NUM_LANDMARKS = 68;  // TODO: get this instead from the SDK.
-  static const int FACE_MODEL_NUM_VERTICES = 3448, FACE_MODEL_NUM_INDICES = 6736;
-  static const long LANDMARK_CONF_THRESH = 10.f;
+  const LandmarksProperties LANDMARKS_INFO[2] = {
+           { 68,  10.0f }, // number of landmark points, confidence threshold value
+           { 126, 5.0f}
+  };
 
   void setInputImageWidth(int width) { input_image_width = width; }
   void setInputImageHeight(int height) { input_image_height = height; }
   int getInputImageWidth() { return input_image_width; }
   int getInputImageHeight() { return input_image_height; }
   int getInputImagePitch() { return input_image_pitch = input_image_width * 3 * sizeof(unsigned char); }
+  void setFaceModel(const char *faceModel) { face_model = faceModel; }
 
   Err createFeatures(const char* modelPath, unsigned int _batchSize = 1);
   Err createFaceDetectionFeature(const char* modelPath, CUstream stream);
@@ -142,6 +155,8 @@ class FaceEngine {
   NvAR_FaceMesh* getFaceMesh();
   NvAR_RenderingParams* getRenderingParams();
   void setFaceStabilization(bool);
+  Err setNumLandmarks(int);
+  int getNumLandmarks() { return numLandmarks; }
   void DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose);
 
   NvCVImage inputImageBuffer{}, tmpImage{};
@@ -157,13 +172,17 @@ class FaceEngine {
   NvAR_BBoxes output_bboxes{};
   int batchSize;
   std::mt19937 ran;
+  int numLandmarks;
+  float confidenceThreshold;
+  std::string face_model;
 
   bool bStabilizeFace;
-  NvAR_Point2f prevLandmark[NUM_LANDMARKS] = {0};
 
   FaceEngine() {
     batchSize = 1;
     bStabilizeFace = true;
+    numLandmarks = LANDMARKS_INFO[0].numPoints;
+    confidenceThreshold = LANDMARKS_INFO[0].confidence_threshold;
     appMode = faceMeshGeneration;
     input_image_width = 640;
     input_image_height = 480;
