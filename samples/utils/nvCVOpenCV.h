@@ -52,7 +52,7 @@ inline void CVImageSet(cv::Mat *cvIm, int width, int height, int numComps, int c
 // Wrap an NvCVImage in a cv::Mat
 inline void CVWrapperForNvCVImage(const NvCVImage *nvcvIm, cv::Mat *cvIm) {
   static const char cvType[] = { 7, 0, 2, 3, 7, 7, 4, 5, 7, 7, 6 };
-  CVImageSet(cvIm, nvcvIm->width, nvcvIm->height, nvcvIm->numComponents, cvType[(int)nvcvIm->pixelFormat], nvcvIm->componentBytes, nvcvIm->pixels, nvcvIm->pitch);
+  CVImageSet(cvIm, nvcvIm->width, nvcvIm->height, nvcvIm->numComponents, cvType[(int)nvcvIm->componentType], nvcvIm->componentBytes, nvcvIm->pixels, nvcvIm->pitch);
 }
 
 // Wrap a cv::Mat in an NvCVImage.

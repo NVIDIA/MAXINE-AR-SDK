@@ -64,17 +64,33 @@ typedef enum NvCV_Status {
   NVCV_ERR_UNSUPPORTEDGPU        = -17,  //!< The GPU is not supported
   NVCV_ERR_WRONGGPU              = -18,  //!< The current GPU is not the one selected.
   NVCV_ERR_UNSUPPORTEDDRIVER     = -19,  //!< The currently installed graphics driver is not supported
+  NVCV_ERR_MODELDEPENDENCIES     = -20,  //!< There is no model with dependencies that match this system
+  NVCV_ERR_PARSE                 = -21,  //!< There has been a parsing or syntax error while reading a file
+  NVCV_ERR_MODELSUBSTITUTION     = -22,  //!< The specified model does not exist and has been substituted.
+  NVCV_ERR_READ                  = -23,  //!< An error occurred while reading a file.
+  NVCV_ERR_WRITE                 = -24,  //!< An error occurred while writing a file.
+  NVCV_ERR_PARAMREADONLY         = -25,  //!< The selected parameter is read-only.
+  NVCV_ERR_TRT_ENQUEUE           = -26,  //!< TensorRT enqueue failed.
+  NVCV_ERR_TRT_BINDINGS          = -27,  //!< Unexpected TensorRT bindings.
+  NVCV_ERR_TRT_CONTEXT           = -28,  //!< An error occurred while creating a TensorRT context.
+  NVCV_ERR_TRT_INFER             = -29,  ///< The was a problem creating the inference engine.
+  NVCV_ERR_TRT_ENGINE            = -30,  ///< There was a problem deserializing the inference runtime engine.
+  NVCV_ERR_NPP                   = -31,  //!< An error has occurred in the NPP library.
+  NVCV_ERR_CONFIG                = -32,  //!< No suitable model exists for the specified parameter configuration.
 
-  NVCV_ERR_CUDA_MEMORY           = -20,  //!< There is not enough CUDA memory for the requested operation.
-  NVCV_ERR_CUDA_VALUE            = -21,  //!< A CUDA parameter is not within the acceptable range.
-  NVCV_ERR_CUDA_PITCH            = -22,  //!< A CUDA pitch is not within the acceptable range.
-  NVCV_ERR_CUDA_INIT             = -23,  //!< The CUDA driver and runtime could not be initialized.
-  NVCV_ERR_CUDA_LAUNCH           = -24,  //!< The CUDA kernel launch has failed.
-  NVCV_ERR_CUDA_KERNEL           = -25,  //!< No suitable kernel image is available for the device.
-  NVCV_ERR_CUDA_DRIVER           = -26,  //!< The installed NVIDIA CUDA driver is older than the CUDA runtime library.
-  NVCV_ERR_CUDA_UNSUPPORTED      = -27,  //!< The CUDA operation is not supported on the current system or device.
-  NVCV_ERR_CUDA_ILLEGAL_ADDRESS  = -28,  //!< CUDA tried to load or store on an invalid memory address.
-  NVCV_ERR_CUDA                  = -30,  //!< An otherwise unspecified CUDA error has been reported.
+  NVCV_ERR_DIRECT3D              = -99,  //!< A Direct3D error has occurred.
+
+  NVCV_ERR_CUDA_BASE             = -100,  //!< CUDA errors are offset from this value.
+  NVCV_ERR_CUDA_VALUE            = -101,  //!< A CUDA parameter is not within the acceptable range.
+  NVCV_ERR_CUDA_MEMORY           = -102,  //!< There is not enough CUDA memory for the requested operation.
+  NVCV_ERR_CUDA_PITCH            = -112,  //!< A CUDA pitch is not within the acceptable range.
+  NVCV_ERR_CUDA_INIT             = -127,  //!< The CUDA driver and runtime could not be initialized.
+  NVCV_ERR_CUDA_LAUNCH           = -819,  //!< The CUDA kernel launch has failed.
+  NVCV_ERR_CUDA_KERNEL           = -309,  //!< No suitable kernel image is available for the device.
+  NVCV_ERR_CUDA_DRIVER           = -135,  //!< The installed NVIDIA CUDA driver is older than the CUDA runtime library.
+  NVCV_ERR_CUDA_UNSUPPORTED      = -901,  //!< The CUDA operation is not supported on the current system or device.
+  NVCV_ERR_CUDA_ILLEGAL_ADDRESS  = -800,  //!< CUDA tried to load or store on an invalid memory address.
+  NVCV_ERR_CUDA                  = -1099, //!< An otherwise unspecified CUDA error has been reported.
 } NvCV_Status;
 
 

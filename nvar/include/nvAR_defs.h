@@ -23,20 +23,22 @@
 #ifndef NvAR_DEFS_H
 #define NvAR_DEFS_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <nvCVImage.h>
 #include <nvCVStatus.h>
 
 #ifdef _WIN32
-#ifdef NVAR_API_EXPORT
-#define NvAR_API __declspec(dllexport) __cdecl
+  #ifdef NVAR_API_EXPORT
+    #define NvAR_API __declspec(dllexport) __cdecl
+  #else
+    #define NvAR_API
+  #endif
 #else
-#define NvAR_API
-#endif
-#elif linux
-// TODO: Linux code goes here
-#endif
+  #define NvAR_API
+#endif // OS dependencies
 
+// TODO: Change the representation to x,y,z instead of array
 typedef struct NvAR_Vector3f
 {
   float vec[3];
@@ -78,6 +80,10 @@ typedef struct NvAR_Point2f {
   float x, y;
 } NvAR_Point2f;
 
+typedef struct NvAR_Point3f {
+  float x, y, z;
+} NvAR_Point3f;
+
 typedef struct NvAR_Vector2f {
   float x, y;
 } NvAR_Vector2f;
@@ -93,10 +99,13 @@ typedef const char* NvAR_FeatureID;
 #define NvAR_Feature_FaceDetection "FaceDetection"
 #define NvAR_Feature_LandmarkDetection "LandmarkDetection"
 #define NvAR_Feature_Face3DReconstruction "Face3DReconstruction"
+#define NvAR_Feature_BodyDetection "BodyDetection"
+#define NvAR_Feature_BodyPoseEstimation "BodyPoseEstimation"
 
 #define NvAR_Parameter_Input(Name) "NvAR_Parameter_Input_" #Name
 #define NvAR_Parameter_Output(Name) "NvAR_Parameter_Output_" #Name
 #define NvAR_Parameter_Config(Name) "NvAR_Parameter_Config_" #Name
+#define NvAR_Parameter_InOut(Name) "NvAR_Parameter_InOut_" #Name
 
 /*
 Parameters supported by each NvAR_FeatureID
@@ -166,5 +175,6 @@ NvAR_Parameter_Output(LandmarksConfidence) - OPTIONAL
 NvAR_Parameter_Output(ExpressionCoefficients) - OPTIONAL
 NvAR_Parameter_Output(ShapeEigenValues) - OPTIONAL
 */
+
 
 #endif  // NvAR_DEFS_H

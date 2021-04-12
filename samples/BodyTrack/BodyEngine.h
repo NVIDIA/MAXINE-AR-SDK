@@ -20,15 +20,16 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 ###############################################################################*/
-#ifndef __FACE_ENGINE__
-#define __FACE_ENGINE__
+#ifndef __BODY_ENGINE__
+#define __BODY_ENGINE__
 
 #include <random>
+#include <chrono>
 #include "nvAR.h"
 #include "nvCVOpenCV.h"
 #include "opencv2/opencv.hpp"
-#include "FeatureVertexName.h"
-#define FITFACE_PRIVATE
+// #include "FeatureVertexName.h"
+#define FITBODY_PRIVATE
 
 class KalmanFilter1D {
  private:
@@ -39,7 +40,7 @@ class KalmanFilter1D {
   float Pminus_;     // Previous P_
   float K_;          // Kalman gain
   float R_;          // Covariance of the observation noise
-  bool bFirstUse;
+  bool bFirstUse_;
 
  public:
   KalmanFilter1D() { reset(); }
@@ -52,7 +53,7 @@ class KalmanFilter1D {
     xhat_ = 0.0f;
     xhatminus_ = 0.0f;
     P_ = 1;
-    bFirstUse = true;
+    bFirstUse_ = true;
     Pminus_ = 0.0f;
     K_ = 0.0f;
   }
@@ -64,9 +65,9 @@ class KalmanFilter1D {
   }
 
   float update(float val) {
-    if (bFirstUse) {
+    if (bFirstUse_) {
       xhat_ = val;
-      bFirstUse = false;
+      bFirstUse_ = false;
     }
 
     xhatminus_ = xhat_;
@@ -96,99 +97,104 @@ do {                                     \
     }                                    \
   } while (0)
 
-typedef struct LandmarksProperties {
-  int numPoints;
-  float confidence_threshold;
-}LandmarksProperties;
+typedef struct KeyPointsProperties {
+   int numPoints;
+   float confidence_threshold;
+}KeyPointsProperties;
+
+// This default focal length matches a logitech webcam
+static const float FOCAL_LENGTH_DEFAULT = 800.f;
 
 /********************************************************************************
- * FaceEngine
+ * BodyEngine
  ********************************************************************************/
 
-class FaceEngine {
+class BodyEngine {
  public:
   enum Err { errNone, errGeneral, errRun, errInitialization, errRead, errEffect, errParameter };
   int input_image_width, input_image_height, input_image_pitch;
-  const LandmarksProperties LANDMARKS_INFO[2] = {
-           { 68,  10.0f }, // number of landmark points, confidence threshold value
-           { 126, 5.0f}
-  };
-
+  
   void setInputImageWidth(int width) { input_image_width = width; }
   void setInputImageHeight(int height) { input_image_height = height; }
   int getInputImageWidth() { return input_image_width; }
   int getInputImageHeight() { return input_image_height; }
   int getInputImagePitch() { return input_image_pitch = input_image_width * 3 * sizeof(unsigned char); }
-  void setFaceModel(const char *faceModel) { face_model = faceModel; }
+  void setBodyModel(const char *bodyModel) { body_model = bodyModel; }
 
   Err createFeatures(const char* modelPath, unsigned int _batchSize = 1);
-  Err createFaceDetectionFeature(const char* modelPath, CUstream stream);
-  Err createLandmarkDetectionFeature(const char* modelPath, unsigned int batchSize, CUstream stream);
-  Err createFaceFittingFeature(const char* modelPath, CUstream stream);
+  Err createBodyDetectionFeature(const char* modelPath, CUstream stream);
+  Err createKeyPointDetectionFeature(const char* modelPath, unsigned int batchSize, CUstream stream);
   void destroyFeatures();
-  void destroyFaceDetectionFeature();
-  void destroyLandmarkDetectionFeature();
-  void destroyFaceFittingFeature();
+  void destroyBodyDetectionFeature();
+  void destroyKeyPointDetectionFeature();
   Err initFeatureIOParams();
-  Err initFaceDetectionIOParams(NvCVImage* _inputImageBuffer);
-  Err initLandmarkDetectionIOParams(NvCVImage* _inputImageBuffer);
-  Err initFaceFittingIOParams(NvCVImage* _inputImageBuffer);
+  Err initBodyDetectionIOParams(NvCVImage* _inputImageBuffer);
+  Err initKeyPointDetectionIOParams(NvCVImage* _inputImageBuffer);
   void releaseFeatureIOParams();
-  void releaseFaceDetectionIOParams();
-  void releaseLandmarkDetectionIOParams();
-  void releaseFaceFittingIOParams();
+  void releaseBodyDetectionIOParams();
+  void releaseKeyPointDetectionIOParams();
 
-  unsigned findFaceBoxes();
+  unsigned findBodyBoxes();
   NvAR_Rect* getLargestBox();
-  NvCV_Status findLandmarks();
+  NvCV_Status findKeyPoints();
   NvAR_BBoxes* getBoundingBoxes();
-  NvAR_Point2f* getLandmarks();
-  NvAR_Quaternion* getPose();
-  float* getLandmarksConfidence();
-  float getAverageLandmarksConfidence();
+  NvAR_Point2f* getKeyPoints();
+  NvAR_Point3f* getKeyPoints3D();
+  NvAR_Quaternion* getJointAngles();
+  float* getKeyPointsConfidence();
+  float getAverageKeyPointsConfidence();
   void enlargeAndSquarifyImageBox(float enlarge, NvAR_Rect& box, int FLAG_variant);
-  static void jiggleBox(std::mt19937& ran, float minMag, float maxMag, const NvAR_Rect& cleanBox, NvAR_Rect& noisyBox);
-  unsigned findLargestFaceBox(NvAR_Rect& faceBox, int variant = 0);
-  unsigned acquireFaceBox(cv::Mat& src, NvAR_Rect& faceBox, int variant = 0); 
-  unsigned acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int variant = 0);
-  Err fitFaceModel(cv::Mat& frame);
-  NvAR_FaceMesh* getFaceMesh();
-  NvAR_RenderingParams* getRenderingParams();
-  void setFaceStabilization(bool);
-  Err setNumLandmarks(int);
-  int getNumLandmarks() { return numLandmarks; }
-  void DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose);
+  unsigned findLargestBodyBox(NvAR_Rect& bodyBox, int variant = 0);
+  unsigned acquireBodyBox(cv::Mat& src, NvAR_Rect& bodyBox, int variant = 0); 
+  unsigned acquireBodyBoxAndKeyPoints(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Point3f* refKeyPoints3D,
+      NvAR_Quaternion* refJointAngles, NvAR_Rect& bodyBox, int variant = 0);
+  void setBodyStabilization(bool);
+  void setMode(int);
+  void setFocalLength(float);
+  void useCudaGraph(bool); // Using cuda graph improves model latency
+  int getNumKeyPoints() { return numKeyPoints; }
+  std::vector<NvAR_Point3f> getReferencePose() { return referencePose; }
 
   NvCVImage inputImageBuffer{}, tmpImage{};
-  NvAR_FeatureHandle faceDetectHandle{}, landmarkDetectHandle{}, faceFitHandle{};
-  std::vector<NvAR_Point2f> facial_landmarks;
-  std::vector<float> facial_landmarks_confidence;
-  std::vector<NvAR_Quaternion> facial_pose;
-  NvAR_FaceMesh* face_mesh{};
-  NvAR_RenderingParams* rendering_params{};
+  NvAR_FeatureHandle bodyDetectHandle{}, keyPointDetectHandle{};
+  std::vector<NvAR_Point2f> keypoints;
+  std::vector<float> keypoints_confidence;
+  std::vector<NvAR_Point3f> keypoints3D;
+  std::vector<NvAR_Quaternion> jointAngles;
   CUstream stream{};
   std::vector<NvAR_Rect> output_bbox_data;
   std::vector<float> output_bbox_conf_data;
   NvAR_BBoxes output_bboxes{};
   int batchSize;
+  int nvARMode;
   std::mt19937 ran;
-  int numLandmarks;
+  unsigned int numKeyPoints;
+  std::vector<NvAR_Point3f> referencePose;
   float confidenceThreshold;
-  std::string face_model;
+  std::string body_model;
 
-  bool bStabilizeFace;
+  bool bStabilizeBody;
+  bool bUseOTAU;
+  char *bdOTAModelPath, *ldOTAModelPath;
+  float bFocalLength;
+  bool bUseCudaGraph;
 
-  FaceEngine() {
+  BodyEngine() {
     batchSize = 1;
-    bStabilizeFace = true;
-    numLandmarks = LANDMARKS_INFO[0].numPoints;
-    confidenceThreshold = LANDMARKS_INFO[0].confidence_threshold;
-    appMode = faceMeshGeneration;
-    input_image_width = 640;
-    input_image_height = 480;
+    nvARMode = 1;
+    bStabilizeBody = true;
+    bUseCudaGraph = true;
+    bFocalLength = FOCAL_LENGTH_DEFAULT;
+    confidenceThreshold = 0.f;
+    appMode = keyPointDetection;
+    input_image_width = 960;
+    input_image_height = 544;
     input_image_pitch = 3 * input_image_width * sizeof(unsigned char);  // RGB
+    bUseOTAU = false;
+    bdOTAModelPath = NULL;
+    ldOTAModelPath = NULL;
   }
-  enum mode { faceDetection = 0, landmarkDetection, faceMeshGeneration } appMode;
-  void setAppMode(FaceEngine::mode _mAppMode);
+  enum mode { bodyDetection = 0, keyPointDetection } appMode;
+  void setAppMode(BodyEngine::mode _mAppMode);
 };
 #endif

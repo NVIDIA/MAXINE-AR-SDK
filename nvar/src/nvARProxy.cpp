@@ -87,99 +87,6 @@ NvCV_Status NvAR_API NvAR_GetVersion(unsigned int* version) {
   return funcPtr(version);
 }
 
-NvCV_Status NvAR_API NvCVImage_Init(NvCVImage* im, unsigned width, unsigned height, int pitch, void* pixels,
-                                       NvCVImage_PixelFormat format, NvCVImage_ComponentType type, unsigned isPlanar,
-                                       unsigned onGPU) {
-  static const auto funcPtr = (decltype(NvCVImage_Init)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Init");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(im, width, height, pitch, pixels, format, type, isPlanar, onGPU);
-}
-
-void NvAR_API NvCVImage_InitView(NvCVImage* subImg, NvCVImage* fullImg, int x, int y, unsigned width,
-                                   unsigned height) {
-  static const auto funcPtr = (decltype(NvCVImage_InitView)*)nvGetProcAddress(getNvARLib(), "NvCVImage_InitView");
-
-  if (nullptr != funcPtr) funcPtr(subImg, fullImg, x, y, width, height);
-}
-
-NvCV_Status NvAR_API NvCVImage_Alloc(NvCVImage* im, unsigned width, unsigned height, NvCVImage_PixelFormat format,
-                              NvCVImage_ComponentType type, unsigned isPlanar, unsigned onGPU, unsigned alignment) {
-  static const auto funcPtr = (decltype(NvCVImage_Alloc)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Alloc");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(im, width, height, format, type, isPlanar, onGPU, alignment);
-}
-
-NvCV_Status NvAR_API NvCVImage_Realloc(NvCVImage* im, unsigned width, unsigned height,
-                                          NvCVImage_PixelFormat format, NvCVImage_ComponentType type,
-                                          unsigned isPlanar, unsigned onGPU, unsigned alignment) {
-  static const auto funcPtr = (decltype(NvCVImage_Realloc)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Realloc");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(im, width, height, format, type, isPlanar, onGPU, alignment);
-}
-
-void NvAR_API NvCVImage_Dealloc(NvCVImage* im) {
-  static const auto funcPtr = (decltype(NvCVImage_Dealloc)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Dealloc");
-
-  if (nullptr != funcPtr) funcPtr(im);
-}
-
-NvCV_Status NvAR_API NvCVImage_Create(unsigned width, unsigned height, NvCVImage_PixelFormat format,
-                                         NvCVImage_ComponentType type, unsigned isPlanar, unsigned onGPU,
-                                         unsigned alignment, NvCVImage** out) {
-  static const auto funcPtr = (decltype(NvCVImage_Create)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Create");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(width, height, format, type, isPlanar, onGPU, alignment, out);
-}
-
-void NvAR_API NvCVImage_Destroy(NvCVImage* im) {
-  static const auto funcPtr = (decltype(NvCVImage_Destroy)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Destroy");
-
-  if (nullptr != funcPtr) funcPtr(im);
-}
-
-void NvAR_API NvCVImage_ComponentOffsets(NvCVImage_PixelFormat format, int* rOff, int* gOff, int* bOff, int* aOff,
-                                           int* yOff) {
-  static const auto funcPtr =
-      (decltype(NvCVImage_ComponentOffsets)*)nvGetProcAddress(getNvARLib(), "NvCVImage_ComponentOffsets");
-
-  if (nullptr != funcPtr) funcPtr(format, rOff, gOff, bOff, aOff, yOff);
-}
-
-NvCV_Status NvAR_API NvCVImage_Transfer(const NvCVImage* src, NvCVImage* dst, float scale, CUstream_st* stream,
-                                           NvCVImage* tmp) {
-  static const auto funcPtr = (decltype(NvCVImage_Transfer)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Transfer");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(src, dst, scale, stream, tmp);
-}
-
-NvCV_Status NvAR_API NvCVImage_Composite(const NvCVImage* fg, const NvCVImage* bg, const NvCVImage* mat, NvCVImage* dst) {
-  static const auto funcPtr = (decltype(NvCVImage_Composite)*)nvGetProcAddress(getNvARLib(), "NvCVImage_Composite");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(fg, bg, mat, dst);
-}
-
-NvCV_Status NvAR_API NvCVImage_CompositeOverConstant(const NvCVImage* src, const NvCVImage* mat,
-                                                        const unsigned char bgColor[3], NvCVImage* dst) {
-  static const auto funcPtr =
-      (decltype(NvCVImage_CompositeOverConstant)*)nvGetProcAddress(getNvARLib(), "NvCVImage_CompositeOverConstant");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(src, mat, bgColor, dst);
-}
-
-NvCV_Status NvAR_API NvCVImage_FlipY(const NvCVImage* src, NvCVImage* dst) {
-  static const auto funcPtr = (decltype(NvCVImage_FlipY)*)nvGetProcAddress(getNvARLib(), "NvCVImage_FlipY");
-
-  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
-  return funcPtr(src, dst);
-}
-
 NvCV_Status NvAR_API NvAR_Create(NvAR_FeatureID featureID, NvAR_FeatureHandle* handle) {
   static const auto funcPtr = (decltype(NvAR_Create)*)nvGetProcAddress(getNvARLib(), "NvAR_Create");
 
@@ -348,17 +255,4 @@ NvCV_Status NvAR_API NvAR_CudaStreamDestroy(CUstream stream) {
 
   if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
   return funcPtr(stream);
-}
-
-#ifdef _WIN32
-__declspec(dllexport) const char* __cdecl
-#else
-const char*
-#endif  // _WIN32 or linux
-    NvCV_GetErrorStringFromCode(NvCV_Status code) {
-  static const auto funcPtr =
-      (decltype(NvCV_GetErrorStringFromCode)*)nvGetProcAddress(getNvARLib(), "NvCV_GetErrorStringFromCode");
-
-  if (nullptr == funcPtr) return "Cannot find nvARPose DLL or its dependencies";
-  return funcPtr(code);
 }

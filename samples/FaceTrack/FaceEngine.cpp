@@ -224,11 +224,12 @@ bail:
 FaceEngine::Err FaceEngine::initLandmarkDetectionIOParams(NvCVImage* inBuf) {
   NvCV_Status nvErr = NVCV_SUCCESS;
   FaceEngine::Err err = FaceEngine::Err::errNone;
+  uint output_bbox_size;
+  unsigned int OUTPUT_SIZE_KPTS, OUTPUT_SIZE_KPTS_CONF;
 
   nvErr = NvAR_SetObject(landmarkDetectHandle, NvAR_Parameter_Input(Image), inBuf, sizeof(NvCVImage));
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
 
-  unsigned int OUTPUT_SIZE_KPTS, OUTPUT_SIZE_KPTS_CONF;
   nvErr = NvAR_GetU32(landmarkDetectHandle, NvAR_Parameter_Config(Landmarks_Size), &OUTPUT_SIZE_KPTS);
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
 
@@ -251,7 +252,7 @@ FaceEngine::Err FaceEngine::initLandmarkDetectionIOParams(NvCVImage* inBuf) {
                            facial_landmarks_confidence.data(), batchSize * OUTPUT_SIZE_KPTS);
   BAIL_IF_CVERR(nvErr, err, FaceEngine::Err::errParameter);
 
-  uint output_bbox_size = batchSize;
+  output_bbox_size = batchSize;
   if (!bStabilizeFace) output_bbox_size = 25;
   output_bbox_data.assign(output_bbox_size, {0.f, 0.f, 0.f, 0.f});
   output_bboxes.boxes = output_bbox_data.data();

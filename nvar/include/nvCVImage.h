@@ -1,6 +1,6 @@
 /*###############################################################################
 #
-# Copyright 2020 NVIDIA Corporation
+# Copyright 2020-2021 NVIDIA Corporation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -30,6 +30,12 @@
 extern "C" {
 #endif // ___cplusplus
 
+
+#ifndef   RTX_CAMERA_IMAGE    // Compile with -DRTX_CAMERA_IMAGE=0 to get more functionality and bug fixes.
+  #define RTX_CAMERA_IMAGE  0 // Set to 1 for RTXCamera, which needs an old version, that avoids new functionality
+#endif // RTX_CAMERA_IMAGE
+
+
 struct CUstream_st;   // typedef struct CUstream_st *CUstream;
 
 //! The format of pixels in an image.
@@ -42,8 +48,16 @@ typedef enum NvCVImage_PixelFormat {
   NVCV_BGR             = 5,    //!< { Red, Green, Blue }
   NVCV_RGBA            = 6,    //!< { Red, Green, Blue, Alpha }
   NVCV_BGRA            = 7,    //!< { Red, Green, Blue, Alpha }
+#if RTX_CAMERA_IMAGE
   NVCV_YUV420          = 8,    //!< Luminance and subsampled Chrominance { Y, Cb, Cr }
   NVCV_YUV422          = 9,    //!< Luminance and subsampled Chrominance { Y, Cb, Cr }
+#else // !RTX_CAMERA_IMAGE
+  NVCV_ARGB            = 8,    //!< { Red, Green, Blue, Alpha }
+  NVCV_ABGR            = 9,    //!< { Red, Green, Blue, Alpha }
+  NVCV_YUV420          = 10,   //!< Luminance and subsampled Chrominance { Y, Cb, Cr }
+  NVCV_YUV422          = 11,   //!< Luminance and subsampled Chrominance { Y, Cb, Cr }
+#endif // !RTX_CAMERA_IMAGE
+  NVCV_YUV444          = 12,   //!< Luminance and full bandwidth Chrominance { Y, Cb, Cr }
 } NvCVImage_PixelFormat;
 
 
@@ -80,35 +94,51 @@ typedef enum NvCVImage_ComponentType {
 #define NVCV_VYUY          4   //!< [VYUY]    Chunky 4:2:2
 #define NVCV_YUYV          6   //!< [YUYV]    Chunky 4:2:2
 #define NVCV_YVYU          8   //!< [YVYU]    Chunky 4:2:2
-#define NVCV_YUV           3   //!< [Y][U][V] Planar 4:2:2 or 4:2:0
-#define NVCV_YVU           5   //!< [Y][V][U] Planar 4:2:2 or 4:2:0
+#define NVCV_CYUV         10   //!< [YUV]     Chunky 4:4:4
+#define NVCV_CYVU         12   //!< [YVU]     Chunky 4:4:4
+#define NVCV_YUV           3   //!< [Y][U][V] Planar 4:2:2 or 4:2:0 or 4:4:4
+#define NVCV_YVU           5   //!< [Y][V][U] Planar 4:2:2 or 4:2:0 or 4:4:4
 #define NVCV_YCUV          7   //!< [Y][UV]   Semi-planar 4:2:2 or 4:2:0 (default for 4:2:0)
 #define NVCV_YCVU          9   //!< [Y][VU]   Semi-planar 4:2:2 or 4:2:0
+
+//! The following are FOURCC aliases for specific layouts. Note that it is still required to specify the format as well
+//! as the layout, e.g. NVCV_YUV420 and NVCV_NV12, even though the NV12 layout is only associated with YUV420 sampling.
+#define NVCV_I420  NVCV_YUV    //!< [Y][U][V] Planar 4:2:0
+#define NVCV_IYUV  NVCV_YUV    //!< [Y][U][V] Planar 4:2:0
+#define NVCV_YV12  NVCV_YVU    //!< [Y][V][U] Planar 4:2:0
+#define NVCV_NV12  NVCV_YCUV   //!< [Y][UV]   Semi-planar 4:2:0 (default for 4:2:0)
+#define NVCV_NV21  NVCV_YCVU   //!< [Y][VU]   Semi-planar 4:2:0
 #define NVCV_YUY2  NVCV_YUYV   //!< [YUYV]    Chunky 4:2:2
-#define NVCV_I420  NVCV_YUV    //!< [Y][U][V] Planar 4:2:2 or 4:2:0
-#define NVCV_IYUV  NVCV_YUV    //!< [Y][U][V] Planar 4:2:2 or 4:2:0
-#define NVCV_YV12  NVCV_YVU    //!< [Y][V][U] Planar 4:2:2 or 4:2:0
-#define NVCV_NV12  NVCV_YCUV   //!< [Y][UV]   Semi-planar 4:2:2 or 4:2:0 (default for 4:2:0)
-#define NVCV_NV21  NVCV_YCVU   //!< [Y][VU]   Semi-planar 4:2:2 or 4:2:0
+#define NVCV_I444  NVCV_YUV    //!< [Y][U][V] Planar 4:4:4
+#define NVCV_YM24  NVCV_YUV    //!< [Y][U][V] Planar 4:4:4
+#define NVCV_YM42  NVCV_YVU    //!< [Y][V][U] Planar 4:4:4
+#define NVCV_NV24  NVCV_YCUV   //!< [Y][UV]   Semi-planar 4:4:4
+#define NVCV_NV42  NVCV_YCVU   //!< [Y][VU]   Semi-planar 4:4:4
 
 //! The following are ORed together for the colorspace field for YUV.
 //! NVCV_601 and NVCV_709 describe the color axes of YUV.
 //! NVCV_VIDEO_RANGE and NVCV_VIDEO_RANGE describe the range, [16, 235] or [0, 255], respectively.
 //! NVCV_CHROMA_COSITED and NVCV_CHROMA_INTSTITIAL describe the location of the chroma samples.
-#define NVCV_601               0   //!< The Rec.601 YUV colorspace, typically used for SD.
-#define NVCV_709               1   //!< The Rec.709 YUV colorspace, typically used for HD.
-#define NVCV_VIDEO_RANGE       0   //!< The video range is [16, 235].
-#define NVCV_FULL_RANGE        4   //!< The video range is [ 0, 255].
-#define NVCV_CHROMA_COSITED    0   //!< The chroma is sampled at the same location as the luma samples horizontally.
-#define NVCV_CHROMA_INTSTITIAL 8   //!< The chroma is sampled between luma samples horizontally.
-#define NVCV_CHROMA_MPEG2      NVCV_CHROMA_COSITED
+#define NVCV_601               0x00   //!< The Rec.601  YUV colorspace, typically used for SD.
+#define NVCV_709               0x01   //!< The Rec.709  YUV colorspace, typically used for HD.
+#define NVCV_2020              0x02   //!< The Rec.2020 YUV colorspace.
+#define NVCV_VIDEO_RANGE       0x00   //!< The video range is [16, 235].
+#define NVCV_FULL_RANGE        0x04   //!< The video range is [ 0, 255].
+#define NVCV_CHROMA_COSITED    0x00   //!< The chroma is sampled at the same location as the luma samples horizontally.
+#define NVCV_CHROMA_INTSTITIAL 0x08   //!< The chroma is sampled between luma samples horizontally.
+#define NVCV_CHROMA_TOPLEFT    0x10   //!< The chroma is sampled at the same location as the luma samples horizontally and vertically.
+#define NVCV_CHROMA_MPEG2      NVCV_CHROMA_COSITED        //!< As is most video.
 #define NVCV_CHROMA_MPEG1      NVCV_CHROMA_INTSTITIAL
+#define NVCV_CHROMA_JPEG       NVCV_CHROMA_INTSTITIAL
+#define NVCV_CHROMA_H261       NVCV_CHROMA_INTSTITIAL
+#define NVCV_CHROMA_INTERSTITIAL  NVCV_CHROMA_INTSTITIAL  //!< Correct spelling
 
 //! This is the value for the gpuMem field or the memSpace argument.
-#define NVCV_CPU         0   //!< The buffer is stored in CPU memory.
-#define NVCV_GPU         1   //!< The buffer is stored in CUDA memory.
-#define NVCV_CUDA        1   //!< The buffer is stored in CUDA memory.
+#define NVCV_CPU          0   //!< The buffer is stored in CPU memory.
+#define NVCV_GPU          1   //!< The buffer is stored in CUDA memory.
+#define NVCV_CUDA         1   //!< The buffer is stored in CUDA memory.
 #define NVCV_CPU_PINNED   2   //!< The buffer is stored in pinned CPU memory.
+#define NVCV_CUDA_ARRAY   3   //!< A CUDA array is used for storage.
 
 //! Image descriptor.
 typedef struct
@@ -126,7 +156,7 @@ NvCVImage {
   unsigned char             numComponents;          //!< The number of components in each pixel.
   unsigned char             planar;                 //!< NVCV_CHUNKY, NVCV_PLANAR, NVCV_UYVY, ....
   unsigned char             gpuMem;                 //!< NVCV_CPU, NVCV_CPU_PINNED, NVCV_CUDA, NVCV_GPU
-  unsigned char             colorspace;             //!< an OR of colorspace, range and chroma phase.
+  unsigned char             colorspace;             //!< An OR of colorspace, range and chroma phase.
   unsigned char             reserved[2];            //!< For structure padding and future expansion. Set to 0.
   void                      *pixels;                //!< Pointer to pixel(0,0) in the image.
   void                      *deletePtr;             //!< Buffer memory to be deleted (can be NULL).
@@ -179,8 +209,6 @@ NvCVImage {
   //! \return NVCV_ERR_MISMATCH    if the formats are different
   //! \return NVCV_ERR_CUDA        if a CUDA error occurred
   //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not yet accommodated.
-  //! \bug        This does not work for planar or semi-planar formats, neither RGB nor YUV.
-  //! \note       This does work for all chunky formats, including UYVY, VYUY, YUYV, YVYU.
   inline NvCV_Status copyFrom(const NvCVImage *src, int srcX, int srcY, int dstX, int dstY, unsigned width, unsigned height);
 
   //! Copy from one image to another. This works for CPU->CPU, CPU->GPU, GPU->GPU, and GPU->CPU.
@@ -194,6 +222,22 @@ NvCVImage {
 
 #endif // ___cplusplus
 } NvCVImage;
+
+
+//! Integer rectangle.
+typedef struct NvCVRect2i   {
+  int x;      //!< The left edge of the rectangle.
+  int y;      //!< The top  edge of the rectangle.
+  int width;  //!< The width  of the rectangle.
+  int height; //!< The height of the rectangle.
+} NvCVRect2i;
+
+
+//! Integer point.
+typedef struct NvCVPoint2i {
+  int x;  //!< The horizontal coordinate.
+  int y;  //!< The vertical coordinate
+} NvCVPoint2i;
 
 
 //! Initialize an image. The C++ constructors can initialize this appropriately.
@@ -221,8 +265,12 @@ NvCV_Status NvCV_API NvCVImage_Init(NvCVImage *im, unsigned width, unsigned heig
 //! \param[in]  y       the top  edge of the sub-image, as coordinate of the full image.
 //! \param[in]  width   the desired width  of the subImage, in pixels.
 //! \param[in]  height  the desired height of the subImage, in pixels.
-//! \bug        This does not work for planar or semi-planar formats, neither RGB nor YUV.
+//! \bug        This does not work in general for planar or semi-planar formats, neither RGB nor YUV.
+//!             However, it does work for all formats with the full image, to make a shallow copy, e.g.
+//!             NvCVImage_InitView(&subImg, &fullImg, 0, 0, fullImage.width, fullImage.height).
+//!             Cropping a planar or semi-planar image can be accomplished with NvCVImage_TransferRect().
 //! \note       This does work for all chunky formats, including UYVY, VYUY, YUYV, YVYU.
+//! \sa         { NvCVImage_TransferRect }
 void NvCV_API NvCVImage_InitView(NvCVImage *subImg, NvCVImage *fullImg, int x, int y, unsigned width, unsigned height);
 
 
@@ -310,36 +358,52 @@ void NvCV_API NvCVImage_ComponentOffsets(NvCVImage_PixelFormat format, int *rOff
 //!
 //! If any of the images resides on the GPU, it may run asynchronously,
 //! so cudaStreamSynchronize() should be called if it is necessary to run synchronously.
-//! The following table indicates the currently-implemented conversions:
-//!    +------------------+-------------+-------------+-------------+-------------+
-//!    |                  |  u8 --> u8  |  u8 --> f32 | f32 --> u8  | f32 --> f32 |
-//!    +------------------+-------------+-------------+-------------+-------------+
-//!    | Y      -- > Y    |      X      |             |      X      |      X      |
-//!    | Y      -- > A    |      X      |             |      X      |      X      |
-//!    | Y      -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | Y      -- > RGBA |      X      |      X      |      X      |      X      |
-//!    | A      -- > Y    |      X      |             |      X      |      X      |
-//!    | A      -- > A    |      X      |             |      X      |      X      |
-//!    | A      -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | A      -- > RGBA |      X      |             |             |             |
-//!    | RGB    -- > Y    |      X      |      X      |             |             |
-//!    | RGB    -- > A    |      X      |      X      |             |             |
-//!    | RGB    -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | RGB    -- > RGBA |      X      |      X      |      X      |      X      |
-//!    | RGBA   -- > Y    |      X      |      X      |             |             |
-//!    | RGBA   -- > A    |             |      X      |             |             |
-//!    | RGBA   -- > RGB  |      X      |      X      |      X      |      X      |
-//!    | RGBA   -- > RGBA |      X      |             |             |             |
-//!    | YUV420 -- > RGB  |      X      |             |             |             |
-//!    | YUV422 -- > RGB  |      X      |             |             |             |
-//!    +------------------+-------------+-------------+-------------+-------------+
+//! The following table indicates (with X) the currently-implemented conversions:
+//!    +-------------------+-------------+-------------+-------------+-------------+
+//!    |                   |  u8 --> u8  |  u8 --> f32 | f32 --> u8  | f32 --> f32 |
+//!    +-------------------+-------------+-------------+-------------+-------------+
+//!    | Y      --> Y      |      X      |             |      X      |      X      |
+//!    | Y      --> A      |      X      |             |      X      |      X      |
+//!    | Y      --> RGB    |      X      |      X      |      X      |      X      |
+//!    | Y      --> RGBA   |      X      |      X      |      X      |      X      |
+//!    | A      --> Y      |      X      |             |      X      |      X      |
+//!    | A      --> A      |      X      |             |      X      |      X      |
+//!    | A      --> RGB    |      X      |      X      |      X      |      X      |
+//!    | A      --> RGBA   |      X      |             |             |             |
+//!    | RGB    --> Y      |      X      |      X      |             |             |
+//!    | RGB    --> A      |      X      |      X      |             |             |
+//!    | RGB    --> RGB    |      X      |      X      |      X      |      X      |
+//!    | RGB    --> RGBA   |      X      |      X      |      X      |      X      |
+//!    | RGBA   --> Y      |      X      |      X      |             |             |
+//!    | RGBA   --> A      |             |      X      |             |             |
+//!    | RGBA   --> RGB    |      X      |      X      |      X      |      X      |
+//!    | RGBA   --> RGBA   |      X      |      X      |      X      |      X      |
+//!    | RGB    --> YUV420 |      X      |             |      X      |             |
+//!    | RGBA   --> YUV420 |      X      |             |      X      |             |
+//!    | RGB    --> YUV422 |      X      |             |      X      |             |
+//!    | RGBA   --> YUV422 |      X      |             |      X      |             |
+//!    | RGB    --> YUV444 |      X      |             |      X      |             |
+//!    | RGBA   --> YUV444 |      X      |             |      X      |             |
+//!    | YUV420 --> RGB    |      X      |      X      |             |             |
+//!    | YUV420 --> RGBA   |      X      |      X      |             |             |
+//!    | YUV422 --> RGB    |      X      |      X      |             |             |
+//!    | YUV422 --> RGBA   |      X      |      X      |             |             |
+//!    | YUV444 --> RGB    |      X      |      X      |             |             |
+//!    | YUV444 --> RGBA   |      X      |      X      |             |             |
+//!    +-------------------+-------------+-------------+-------------+-------------+
 //! where
 //! * Either source or destination can be CHUNKY or PLANAR.
 //! * Either source or destination can reside on the CPU or the GPU.
 //! * The RGB components are in any order (i.e. RGB or BGR; RGBA or BGRA).
-//! * YUV requires that the colorspace field be set manually prior to Transfer.
+//! * For RGBA (or BGRA) destinations, most implementations do not change the alpha channel, so it is recommended to
+//!   set it at initialization time with [cuda]memset(im.pixels, -1, im.pitch * im.height) or
+//!   [cuda]memset(im.pixels, -1, im.pitch * im.height * im.numComponents) for chunky and planar images respectively.
+//! * YUV requires that the colorspace field be set manually prior to Transfer, e.g. typical for layout=NVCV_NV12:
+//!   image.colorspace = NVCV_709 | NVCV_VIDEO_RANGE | NVCV_CHROMA_INTSTITIAL;
+//! * There are also RGBf16-->RGBf32 and RGBf32-->RGBf16 transfers.
 //! * Additionally, when the src and dst formats are the same, all formats are accommodated on CPU and GPU,
-//! and this can be used as a replacement for cudaMemcpy2DAsync() (which it utilizes).
+//!   and this can be used as a replacement for cudaMemcpy2DAsync() (which it utilizes). This is also true for YUV,
+//!   whose src and dst must share the same format, layout and colorspace.
 //!
 //! When there is some kind of conversion AND the src and dst reside on different processors (CPU, GPU),
 //! it is necessary to have a temporary GPU buffer, which is reshaped as needed to match the characteristics
@@ -368,17 +432,139 @@ NvCV_Status NvCV_API NvCVImage_Transfer(
              const NvCVImage *src, NvCVImage *dst, float scale, struct CUstream_st *stream, NvCVImage *tmp);
 
 
-//! Composite one BGRu8 source image over another using the given matte.
-//! \param[in]  fg      the foreground source BGRu8 (or RGBu8) image.
-//! \param[in]  bg      the background source BGRu8 (or RGBu8) image.
+//! Transfer a rectangular portion of an image.
+//! See NvCVImage_Transfer() for the pixel format combinations that are implemented.
+//! \param[in]  src     the source image.
+//! \param[in]  srcRect the subRect of the src to be transferred (NULL implies the whole image).
+//! \param[out] dst     the destination image.
+//! \param[in]  dstPt   location to which the srcRect is to be copied (NULL implies (0,0)).
+//! \param[in]  scale   scale factor applied to the magnitude during transfer, typically 1, 255 or 1/255.
+//! \param[in]  stream  the CUDA stream.
+//! \param[in]  tmp     a staging image.
+//! \return     NVCV_SUCCESS  if the operation was completed successfully.
+//! \note       The actual transfer region may be smaller, because the rects are clipped against the images.
+NvCV_Status NvCV_API NvCVImage_TransferRect(
+  const NvCVImage *src, const NvCVRect2i *srcRect, NvCVImage *dst, const NvCVPoint2i *dstPt,
+  float scale, struct CUstream_st *stream, NvCVImage *tmp);
+
+
+//! Transfer from a YUV image.
+//! YUVu8 --> RGBu8 and YUVu8 --> RGBf32 are currently available.
+//! \param[in]  y             pointer to pixel(0,0) of the luminance channel.
+//! \param[in]  yPixBytes     the byte stride between y pixels horizontally.
+//! \param[in]  yPitch        the byte stride between y pixels vertically.
+//! \param[in]  u             pointer to pixel(0,0) of the u (Cb) chrominance channel.
+//! \param[in]  v             pointer to pixel(0,0) of the v (Cr) chrominance channel.
+//! \param[in]  uvPixBytes    the byte stride between u or v pixels horizontally.
+//! \param[in]  uvPitch       the byte stride between u or v pixels vertically.
+//! \param[in]  yuvColorSpace the yuv colorspace, specifying range, chromaticities, and chrominance phase.
+//! \param[in]  yuvMemSpace   the memory space where the pixel buffers reside.
+//! \param[out] dst           the destination image.
+//! \param[in]  dstRect       the destination rectangle (NULL implies the whole image).
+//! \param[in]  scale         scale factor applied to the magnitude during transfer, typically 1, 255 or 1/255.
+//! \param[in]  stream        the CUDA stream.
+//! \param[in]  tmp           a staging image.
+//! \return     NVCV_SUCCESS  if the operation was completed successfully.
+//! \note       The actual transfer region may be smaller, because the rects are clipped against the images.
+NvCV_Status NvCV_API NvCVImage_TransferFromYUV(
+  const void *y,                int yPixBytes,  int yPitch,
+  const void *u, const void *v, int uvPixBytes, int uvPitch,
+  NvCVImage_PixelFormat yuvFormat, NvCVImage_ComponentType yuvType,
+  unsigned yuvColorSpace, unsigned yuvMemSpace,
+  NvCVImage *dst, const NvCVRect2i *dstRect, float scale, struct CUstream_st *stream, NvCVImage *tmp);
+
+
+//! Transfer to a YUV image.
+//! RGBu8 --> YUVu8 and RGBf32 --> YUVu8 are currently available.
+//! \param[in]  src           the source image.
+//! \param[in]  srcRect       the destination rectangle (NULL implies the whole image).
+//! \param[out] y             pointer to pixel(0,0) of the luminance channel.
+//! \param[in]  yPixBytes     the byte stride between y pixels horizontally.
+//! \param[in]  yPitch        the byte stride between y pixels vertically.
+//! \param[out] u             pointer to pixel(0,0) of the u (Cb) chrominance channel.
+//! \param[out] v             pointer to pixel(0,0) of the v (Cr) chrominance channel.
+//! \param[in]  uvPixBytes    the byte stride between u or v pixels horizontally.
+//! \param[in]  uvPitch       the byte stride between u or v pixels vertically.
+//! \param[in]  yuvColorSpace the yuv colorspace, specifying range, chromaticities, and chrominance phase.
+//! \param[in]  yuvMemSpace   the memory space where the pixel buffers reside.
+//! \param[in]  scale         scale factor applied to the magnitude during transfer, typically 1, 255 or 1/255.
+//! \param[in]  stream        the CUDA stream.
+//! \param[in]  tmp           a staging image.
+//! \return     NVCV_SUCCESS  if the operation was completed successfully.
+//! \note       The actual transfer region may be smaller, because the rects are clipped against the images.
+NvCV_Status NvCV_API NvCVImage_TransferToYUV(
+  const NvCVImage *src, const NvCVRect2i *srcRect, 
+  const void *y,                int yPixBytes,  int yPitch,
+  const void *u, const void *v, int uvPixBytes, int uvPitch,
+  NvCVImage_PixelFormat yuvFormat, NvCVImage_ComponentType yuvType,
+  unsigned yuvColorSpace, unsigned yuvMemSpace,
+  float scale, struct CUstream_st *stream, NvCVImage *tmp);
+
+
+//! Between rendering by a graphics system and Transfer by CUDA, it is necessary to map the texture resource.
+//! There is a fair amount of overhead, so its use should be minimized.
+//! Every call to NvCVImage_MapResource() should be matched by a subsequent call to NvCVImage_UnmapResource().
+//! \param[in,out]  im      the image to be mapped.
+//! \param[in]      stream  the stream on which the mapping is to be performed.
+//! \return         NVCV_SUCCESS is the operation was completed successfully.
+NvCV_Status NvCV_API NvCVImage_MapResource(NvCVImage *im, struct CUstream_st *stream);
+
+
+//! After transfer by CUDA, the texture resource must be unmapped in order to be used by the graphics system again.
+//! There is a fair amount of overhead, so its use should be minimized.
+//! Every call to NvCVImage_UnmapResource() should correspond to a preceding call to NvCVImage_MapResource().
+//! \param[in,out]  im      the image to be mapped.
+//! \param[in]      stream  the CUDA stream on which the mapping is to be performed.
+//! \return         NVCV_SUCCESS is the operation was completed successfully.
+NvCV_Status NvCV_API NvCVImage_UnmapResource(NvCVImage *im, struct CUstream_st *stream);
+
+
+//! Composite one source image over another using the given matte.
+//! This accommodates all RGB and RGBA formats, with u8 and f32 components.
+//! \param[in]  fg      the foreground source image.
+//! \param[in]  bg      the background source image.
 //! \param[in]  mat     the matte  Yu8   (or Au8)   image, indicating where the src should come through.
-//! \param[out] dst     the destination BGRu8 (or RGBu8) image. This can be the same as fg or bg.
+//! \param[out] dst     the destination image. This can be the same as fg or bg.
+//! \param[in]  stream  the CUDA stream on which the composition is to be performed.
 //! \return NVCV_SUCCESS         if the operation was successful.
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
-//! \bug    This is only implemented for 3-component u8 fg, bg and dst, and 1-component u8 mat,
-//!         where all images are resident on the CPU.
+//! \return NVCV_ERR_MISMATCH    if either the fg & bg & dst formats do not match, or if fg & bg & dst & mat are not
+//!                              in the same address space (CPU or GPU).
+#if RTX_CAMERA_IMAGE == 0
+NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *bg, const NvCVImage *mat, NvCVImage *dst,
+            struct CUstream_st *stream);
+#else // RTX_CAMERA_IMAGE == 1  // No GPU acceleration
 NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *bg, const NvCVImage *mat, NvCVImage *dst);
+#endif // RTX_CAMERA_IMAGE == 1
 
+//! Composite one source image over another using the given matte.
+//! Not all pixel format combinations are accommodated.
+//! \param[in]      fg      the foreground source image.
+//! \param[in]      fgOrg   the upper-left corner of the fg image to be composited (NULL implies (0,0)).
+//! \param[in]      bg      the background source image.
+//! \param[in]      bgOrg   the upper-left corner of the bg image to be composited (NULL implies (0,0)).
+//! \param[in]      mat     the matte image, indicating where the src should come through.
+//!                         This determines the size of the rectangle to be composited.
+//!                         If this is multi-channel, the alpha channel is used as the matte.
+//! \param[in]      mode    the composition mode. Only 0 (straight alpha over) is implemented at this time.
+//! \param[out]     dst     the destination image. This can be the same as fg or bg.
+//! \param[in]      dstOrg  the upper-left corner of the dst image to be updated (NULL implies (0,0)).
+//! \param[in]      stream  the CUDA stream on which the composition is to be performed.
+//! \note   If a smaller region of a matte is desired, a window can be created using
+//!         NvCVImage_InitView() for chunky or NvCVImage_Init() for planar pixels.
+//! \return NVCV_SUCCESS         if the operation was successful.
+//! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
+//! \return NVCV_ERR_MISMATCH    if either the fg & bg & dst formats do not match, or if fg & bg & dst & mat are not
+//!                              in the same address space (CPU or GPU).
+//! \bug  Though RGBA destinations are accommodated, the A channel is not updated at all.
+//! \todo Accommodate premultiplied alpha, either as a flag in NvCVImage or as a different mode.
+//! \todo If the destination has an A channel, update it as per Adobe and Pixar.
+NvCV_Status NvCV_API NvCVImage_CompositeRect(
+    const NvCVImage *fg,  const NvCVPoint2i *fgOrg,
+    const NvCVImage *bg,  const NvCVPoint2i *bgOrg,
+    const NvCVImage *mat, unsigned mode,
+    NvCVImage       *dst, const NvCVPoint2i *dstOrg,
+    struct CUstream_st *stream);
 
 //! Composite a BGRu8 source image over a constant color field using the given matte.
 //! \param[in]      src     the source BGRu8 (or RGBu8) image.
@@ -464,10 +650,16 @@ NvCVImage::~NvCVImage() { NvCVImage_Dealloc(this); }
 
 NvCV_Status NvCVImage::copyFrom(const NvCVImage *src, int srcX, int srcY, int dstX, int dstY, unsigned wd,
                                   unsigned ht) {
+#if RTX_CAMERA_IMAGE // This only works for chunky images
   NvCVImage srcView, dstView;
   NvCVImage_InitView(&srcView, const_cast<NvCVImage *>(src), srcX, srcY, wd, ht);
   NvCVImage_InitView(&dstView, this, dstX, dstY, wd, ht);
   return NvCVImage_Transfer(&srcView, &dstView, 1.f, 0, nullptr);
+#else // !RTX_CAMERA_IMAGE bug fix for non-chunky images
+  NvCVRect2i  srcRect = { (int)srcX, (int)srcY, (int)wd, (int)ht };
+  NvCVPoint2i dstPt   = { (int)dstX, (int)dstY };
+  return NvCVImage_TransferRect(src, &srcRect, this, &dstPt, 1.f, 0, nullptr);
+#endif // RTX_CAMERA_IMAGE
 }
 
 /********************************************************************************

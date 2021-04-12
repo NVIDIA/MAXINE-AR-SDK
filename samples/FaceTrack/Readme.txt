@@ -44,7 +44,7 @@ output-path
 The full or relative path to the folder where you want the output .nvf format file to be written.
 Either the forward slash (/) or back slash (\) can be used as a separator between path elements.
 
-The ConvertSurreyFaceModel.exe file is distributed in the https://github.com/nvidia/BROADCAST-AR-SDK repo.
+The ConvertSurreyFaceModel.exe file is distributed in the https://github.com/nvidia/MAXINE-AR-SDK repo.
 
 3) The sample application provided with NVIDIA AR SDK requires that the model file be named face_model0.nvf.
 Place the face_model0.nvf file in the model folder. By default the models folder is your_sdk_install_path/models 

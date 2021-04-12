@@ -100,4 +100,4 @@ void average_poses(NvAR_Quaternion *q, unsigned n);
 void set_rotation_from_quaternion(const NvAR_Quaternion *quat, float M[3*3]);
 
 
-#endif __RENDERING_UTILS__
+#endif // __RENDERING_UTILS__

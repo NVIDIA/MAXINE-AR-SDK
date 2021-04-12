@@ -5,3 +5,4 @@ target_include_directories(utils_sample INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/ut
 target_link_libraries(utils_sample INTERFACE GLM)
 add_subdirectory(external)
 add_subdirectory(FaceTrack)
+add_subdirectory(BodyTrack)

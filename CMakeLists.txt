@@ -24,6 +24,13 @@ set(SDK_INCLUDES_PATH ${CMAKE_CURRENT_SOURCE_DIR}/nvar/include)
 add_library(nvARPose INTERFACE)
 target_include_directories(nvARPose INTERFACE ${SDK_INCLUDES_PATH})
 
+# Add target for NVCVImage
+add_library(NVCVImage INTERFACE)
+target_include_directories(NVCVImage INTERFACE ${SDK_INCLUDES_PATH})
+if(UNIX)
+	target_link_libraries(NVCVImage INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/bin/libNVCVImage.so)
+endif(UNIX)
+
 set(ENABLE_SAMPLES TRUE)
 add_subdirectory(samples)
 
