@@ -39,8 +39,6 @@ The SDK is supported on NVIDIA GPUs that are based on the NVIDIA® Turing™ or 
 * Microsoft Visual Studio: 2015 (MSVC14.0) or later
 * CMake: v3.12 or later
 * NVIDIA Graphics Driver for Windows: 455.57 or later
-* NVIDIA CUDA Toolkit: 11.1 or later
-* NVIDIA TensorRT: 7.2.2.5
 
 ## NVIDIA MAXINE Branding Guidelines
 If you integrate an NVIDIA MAXINE SDK within your product, please follow the required branding guidelines that are available [here](
