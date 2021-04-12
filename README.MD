@@ -30,7 +30,7 @@ NVIDIA MAXINE AR SDK is distributed in the following parts:
 - This open source repository that includes the [SDK API and proxy linking source code](https://github.com/NVIDIA/MAXINE-AR-SDK/tree/master/nvar), and [sample applications and their dependency libraries](https://github.com/NVIDIA/MAXINE-AR-SDK/tree/master/samples).
 - An installer hosted on [NVIDIA Maxine developer page](https://www.nvidia.com/broadcast-sdk-resources) that installs the SDK DLLs, the models, and the SDK dependency libraries.
 
-Please refer to [SDK programming guide](https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/NVIDIA%20AR%20SDK%20Programming%20Guide.pdf) for configuring and integrating the SDK, compiling and running the sample applications. Please visit the [NVIDIA MAXINE AR SDK](https://developer.nvidia.com/maxine-getting-started) webpage for more information about the SDK.
+Please refer to [SDK programming guide](https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/docs/NVIDIA%20AR%20SDK%20Programming%20Guide.pdf) for configuring and integrating the SDK, compiling and running the sample applications. Please visit the [NVIDIA MAXINE AR SDK](https://developer.nvidia.com/maxine-getting-started) webpage for more information about the SDK.
 
 ## System requirements
 The SDK is supported on NVIDIA GPUs that are based on the NVIDIA® Turing™ or Ampere™ architecture and have Tensor Cores.
