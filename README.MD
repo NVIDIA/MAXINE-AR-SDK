@@ -18,7 +18,7 @@ The SDK has the following features:
 <img src="https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/resources/ar_004.png" alt="Face 3D mesh and tracking" width="320" height="180"/>
 </p>
 </p><p align="center">
-<img src="https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/resources/ar_005.png" alt="Body 3D Pose and tracking" width="320" height="180"/>
+<img src="https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/resources/ar_005.png" alt="3D Body Pose and tracking" width="320" height="180"/>
 </p>
 
 The SDK provides two sample applications that demonstrate the features listed above in real time by using a webcam or offline videos.
