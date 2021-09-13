@@ -84,7 +84,7 @@ bool CheckResult(NvCV_Status nvErr, unsigned line);
 
 #define BAIL_IF_ERR(err)                 \
 do {                                     \
-    if (0!=err) {                        \
+    if (0 != (err)) {                    \
       goto bail;                         \
     }                                    \
   } while (0)

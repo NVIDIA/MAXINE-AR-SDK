@@ -21,7 +21,7 @@
 #
 ###############################################################################*/
 #include "BodyEngine.h"
-
+#include <iostream>
 
 bool CheckResult(NvCV_Status nvErr, unsigned line) {
   if (NVCV_SUCCESS == nvErr) return true;
@@ -42,7 +42,7 @@ BodyEngine::Err BodyEngine::createFeatures(const char* modelPath, unsigned int _
     if (err != Err::errNone) {
       printf("ERROR: An error has occured while initializing Body Detection\n");
     }
-  } 
+  }
   else if (appMode == keyPointDetection) {
     err = createKeyPointDetectionFeature(modelPath, _batchSize, stream);
     if (err != Err::errNone) {
@@ -104,7 +104,7 @@ BodyEngine::Err BodyEngine::createKeyPointDetectionFeature(const char* modelPath
   nvErr = NvAR_SetU32(keyPointDetectHandle, NvAR_Parameter_Config(BatchSize), batchSize);
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
-  nvErr = NvAR_SetU32(keyPointDetectHandle, NvAR_Parameter_Config(NVAR_MODE), nvARMode);
+  nvErr = NvAR_SetU32(keyPointDetectHandle, NvAR_Parameter_Config(Mode), nvARMode);
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
   nvErr = NvAR_SetU32(keyPointDetectHandle, NvAR_Parameter_Config(Temporal), bStabilizeBody);
@@ -136,7 +136,7 @@ BodyEngine::Err BodyEngine::initFeatureIOParams() {
     if (err != Err::errNone) {
       printf("ERROR: An error has occured while setting input, output parmeters for Body Detection\n");
     }
-  } 
+  }
   else if (appMode == keyPointDetection) {
     err = initKeyPointDetectionIOParams(&inputImageBuffer);
     if (err != Err::errNone) {
@@ -182,7 +182,7 @@ BodyEngine::Err BodyEngine::initKeyPointDetectionIOParams(NvCVImage* inBuf) {
 
   nvErr = NvAR_GetU32(keyPointDetectHandle, NvAR_Parameter_Config(NumKeyPoints), &numKeyPoints);
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
-  
+
   keypoints.assign(batchSize * numKeyPoints, {0.f, 0.f});
   keypoints3D.assign(batchSize * numKeyPoints, {0.f, 0.f, 0.f});
   jointAngles.assign(batchSize * numKeyPoints, {0.f, 0.f, 0.f, 1.f});
@@ -200,7 +200,7 @@ BodyEngine::Err BodyEngine::initKeyPointDetectionIOParams(NvCVImage* inBuf) {
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
   nvErr = NvAR_SetObject(keyPointDetectHandle, NvAR_Parameter_Output(KeyPoints3D), keypoints3D.data(),
-  						 sizeof(NvAR_Point3f));
+                                                 sizeof(NvAR_Point3f));
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
   nvErr = NvAR_SetObject(keyPointDetectHandle, NvAR_Parameter_Output(JointAngles), jointAngles.data(),
@@ -373,7 +373,7 @@ NvAR_Quaternion* BodyEngine::getJointAngles() { return jointAngles.data(); }
    float average_confidence = 0.0f;
    float* keypoints_confidence_all = getKeyPointsConfidence();
    for (int i = 0; i < batchSize; i++) {
-     for (int j = 0; j < numKeyPoints; j++) {
+     for (unsigned int j = 0; j < numKeyPoints; j++) {
        average_confidence += keypoints_confidence_all[i * numKeyPoints + j];
      }
    }
@@ -381,7 +381,7 @@ NvAR_Quaternion* BodyEngine::getJointAngles() { return jointAngles.data(); }
    return average_confidence;
  }
 
-unsigned BodyEngine::findLargestBodyBox(NvAR_Rect& bodyBox, int variant) {
+unsigned BodyEngine::findLargestBodyBox(NvAR_Rect& bodyBox, int /*variant*/) {
   unsigned n;
   NvAR_Rect* pBodyBox;
 

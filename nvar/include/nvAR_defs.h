@@ -38,7 +38,6 @@
   #define NvAR_API
 #endif // OS dependencies
 
-// TODO: Change the representation to x,y,z instead of array
 typedef struct NvAR_Vector3f
 {
   float vec[3];
@@ -96,7 +95,8 @@ typedef struct NvAR_RenderingParams {
 
 // Parameters provided by client application
 typedef const char* NvAR_FeatureID;
-#define NvAR_Feature_FaceDetection "FaceDetection"
+#define NvAR_Feature_FaceBoxDetection "FaceBoxDetection"
+#define NvAR_Feature_FaceDetection "FaceDetection"                    // deprecated in favor of FaceBox
 #define NvAR_Feature_LandmarkDetection "LandmarkDetection"
 #define NvAR_Feature_Face3DReconstruction "Face3DReconstruction"
 #define NvAR_Feature_BodyDetection "BodyDetection"
@@ -174,6 +174,45 @@ NvAR_Parameter_Output(Pose) - OPTIONAL
 NvAR_Parameter_Output(LandmarksConfidence) - OPTIONAL
 NvAR_Parameter_Output(ExpressionCoefficients) - OPTIONAL
 NvAR_Parameter_Output(ShapeEigenValues) - OPTIONAL
+
+*******NvAR_Feature_BodyDetection*******
+Config:
+NvAR_Parameter_Config(FeatureDescription)
+NvAR_Parameter_Config(CUDAStream)
+NvAR_Parameter_Config(TRTModelDir)
+NvAR_Parameter_Config(Temporal)
+
+Input:
+NvAR_Parameter_Input(Image)
+
+Output:
+NvAR_Parameter_Output(BoundingBoxes)
+NvAR_Parameter_Output(BoundingBoxesConfidence) - OPTIONAL
+
+*******NvAR_Feature_BodyPoseEstimation*******
+Config:
+NvAR_Parameter_Config(FeatureDescription)
+NvAR_Parameter_Config(CUDAStream)
+NvAR_Parameter_Config(ModelDir)
+NvAR_Parameter_Config(BatchSize)
+NvAR_Parameter_Config(Mode)
+NvAR_Parameter_Config(NumKeyPoints)
+NvAR_Parameter_Config(ReferencePose)
+NvAR_Parameter_Config(Temporal)
+NvAR_Parameter_Config(UseCudaGraph)
+NvAR_Parameter_Config(FocalLength)
+
+Input:
+NvAR_Parameter_Input(Image)
+NvAR_Parameter_Input(BoundingBoxes) - OPTIONAL
+
+Output:
+NvAR_Parameter_Output(BoundingBoxes) - OPTIONAL
+NvAR_Parameter_Output(BoundingBoxesConfidence) - OPTIONAL
+NvAR_Parameter_Output(KeyPoints)
+NvAR_Parameter_Output(KeyPoints3D)
+NvAR_Parameter_Output(JointAngles)
+NvAR_Parameter_Output(KeyPointsConfidence) - OPTIONAL
 */
 
 

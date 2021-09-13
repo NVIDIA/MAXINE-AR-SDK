@@ -22,25 +22,21 @@
 ###############################################################################*/
 #include <math.h>
 #include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <iomanip>
 #include <iostream>
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
+#include <fstream>
 
 #include "FaceEngine.h"
+#include "RenderingUtils.h"
 #include "nvAR.h"
 #include "nvAR_defs.h"
 #include "opencv2/opencv.hpp"
-#include "RenderingUtils.h"
 
 #ifndef M_PI
 #define M_PI 3.1415926535897932385
@@ -73,7 +69,7 @@ bool FLAG_debug = false, FLAG_verbose = false, FLAG_temporal = true, FLAG_captur
      FLAG_offlineMode = false, FLAG_isNumLandmarks126 = false;
 std::string FLAG_outDir, FLAG_inFile, FLAG_outFile, FLAG_modelPath, FLAG_landmarks, FLAG_proxyWireframe,
     FLAG_captureCodec = "avc1", FLAG_camRes, FLAG_faceModel;
-unsigned int FLAG_batch = 1, FLAG_appMode = 2;
+unsigned int FLAG_appMode = 2;
 
 /********************************************************************************
  * Usage
@@ -81,7 +77,7 @@ unsigned int FLAG_batch = 1, FLAG_appMode = 2;
 
 static void Usage() {
   printf(
-      "AboutFace [<args> ...]\n"
+      "FaceTrack [<args> ...]\n"
       "where <args> is\n"
       " --verbose[=(true|false)]          report interesting info\n"
       " --debug[=(true|false)]            report debugging info\n"
@@ -89,16 +85,13 @@ static void Usage() {
       " --capture_outputs[=(true|false)]  enables video/image capture and writing face detection/landmark outputs\n"
       " --offline_mode[=(true|false)]     disables webcam, reads video from file and writes output video results\n"
       " --cam_res=[WWWx]HHH               specify resolution as height or width x height\n"
-      " --in_file=<file>                  specify the  input file\n"
       " --codec=<fourcc>                  FOURCC code for the desired codec (default H264)\n"
       " --in=<file>                       specify the  input file\n"
-      " --out_file=<file>                 specify the output file\n"
       " --out=<file>                      specify the output file\n"
       " --model_path=<path>               specify the directory containing the TRT models\n"
       " --landmarks_126[=(true|false)]    set the number of facial landmark points to 126, otherwise default to 68\n"
       " --face_model=<file>               specify the  name of the face model\n"
       " --wireframe_mesh=<path>           specify the path to a proxy wireframe mesh\n"
-      " --batch=<uint>                    1 - 8, used for batch inferencing in landmark detector\n"
       " --app_mode[=(0|1|2)]              App mode. 0: Face detection, 1: Landmark detection, 2: Face fitting "
       "(Default)."
       " --benchmarks[=<pattern>]          run benchmarks\n");
@@ -255,9 +248,12 @@ std::string getCalendarTime() {
   // Convert to tm to get structure holding a calendar date and time broken down into its components.
   std::tm brokenTime = *std::localtime(&currentTime);
   std::ostringstream calendarTime;
-  calendarTime << std::put_time(
-      &brokenTime,
-      "%Y-%m-%d-%H-%M-%S");  // (YYYY-MM-DD-HH-mm-ss)<Year>-<Month>-<Date>-<Hour>-<Mins>-<Seconds>
+  // calendarTime << std::put_time(
+  //     &brokenTime,
+  //     "%Y-%m-%d-%H-%M-%S");  // (YYYY-MM-DD-HH-mm-ss)<Year>-<Month>-<Date>-<Hour>-<Mins>-<Seconds>
+  char time_string[24];
+  if (0 < strftime(time_string, sizeof(time_string), "%Y-%m-%d-%H-%M-%S] ", &brokenTime))
+    calendarTime << time_string;  // (YYYY-MM-DD-HH-mm-ss)<Year>-<Month>-<Date>-<Hour>-<Mins>-<Seconds>
   // Get the time since epoch 0(Thu Jan  1 00:00:00 1970) and the remainder after division is
   // our milliseconds
   std::chrono::milliseconds currentMilliseconds =
@@ -325,7 +321,7 @@ class DoApp {
   static const char *errorStringFromCode(Err code);
 
   cv::VideoCapture cap{};
-  cv::Mat frame;
+  cv::Mat frame, outputFrame;
   int inputWidth, inputHeight;
   cv::VideoWriter faceDetectOutputVideo{}, landMarkOutputVideo{}, faceFittingOutputVideo{};
   int frameIndex;
@@ -335,6 +331,7 @@ class DoApp {
   MyTimer frameTimer;
   cv::VideoWriter capturedVideo;
   std::ofstream faceEngineVideoOutputFile;
+  FILE *exprFile, *shapeFile, *poseFile;
 
   FaceEngine::Err nvErr;
   float expr[6];
@@ -353,12 +350,12 @@ void DoApp::processKey(int key) {
       face_ar_engine.destroyFeatures();
       face_ar_engine.setAppMode(FaceEngine::mode::faceMeshGeneration);
       nvErr =  face_ar_engine.createFeatures(FLAG_modelPath.c_str());
-      // If there is an error, fallback to mode '2' i.e. landmark detection
       if (nvErr == FaceEngine::Err::errNone) {
         face_ar_engine.initFeatureIOParams();
         break;
       } else if (nvErr == FaceEngine::Err::errInitialization) {
         showFaceFitErrorMessage();
+        // If there is an error, fallback to mode '2' i.e. landmark detection
       }
     case '2':
       face_ar_engine.destroyFeatures();
@@ -394,8 +391,6 @@ void DoApp::processKey(int key) {
 }
 
 DoApp::Err DoApp::initFaceEngine(const char *modelPath, bool isNumLandmarks126) {
-  Err err = errNone;
-
   if (!cap.isOpened()) return errVideo;
 
   int numLandmarkPoints = isNumLandmarks126 ? 126 : 68;
@@ -467,6 +462,7 @@ void DoApp::DrawBBoxes(const cv::Mat &src, NvAR_Rect *output_bbox) {
                   cv::Scalar(255, 0, 0), 2);
   if (FLAG_offlineMode) faceDetectOutputVideo.write(frm);
 }
+
 
 void DoApp::writeVideoAndEstResults(const cv::Mat &frm, NvAR_BBoxes output_bboxes, NvAR_Point2f *landmarks) {
   if (captureVideo) {
@@ -668,13 +664,21 @@ DoApp::Err DoApp::acquireFaceBox() {
     writeFrameAndEstResults(frame, face_ar_engine.output_bboxes);
     writeVideoAndEstResults(frame, face_ar_engine.output_bboxes);
   }
-  if (0 == n) return errNoFace;
 
 #ifdef VISUALIZE
-
-  if (drawVisualization) {
-    DrawBBoxes(frame, &output_bbox);
+  if (n > 0) {                              // At least one face was found
+    if (drawVisualization) {
+      DrawBBoxes(frame, &output_bbox);      // This will write a frame if in offlineMode 
+    }
   }
+  else {                                    // No faces found
+    if (FLAG_offlineMode) {
+      faceDetectOutputVideo.write(frame);   // This will write a frame if in offlineMode 
+    }
+    err = errNoFace;
+  }
+#else  // !VISUALIZE
+  if (0 == n) err = errNoFace;
 #endif  // VISUALIZE
   frameIndex++;
 
@@ -701,17 +705,25 @@ DoApp::Err DoApp::acquireFaceBoxAndLandmarks() {
     writeFrameAndEstResults(frame, face_ar_engine.output_bboxes, facial_landmarks.data());
     writeVideoAndEstResults(frame, face_ar_engine.output_bboxes, facial_landmarks.data());
   }
-  if (0 == n) return errNoFace;
 
 #ifdef VISUALIZE
-
-  if (drawVisualization) {
-    DrawLandmarkPoints(frame, facial_landmarks.data(), numLandmarks);
-    if (FLAG_offlineMode) {
-      DrawBBoxes(frame, &output_bbox);
+  if (n > 0) {                              // At least one face found
+    if (drawVisualization) {
+      DrawLandmarkPoints(frame, facial_landmarks.data(), numLandmarks); // Writes frame in offline mode
+      if (FLAG_offlineMode) {
+        DrawBBoxes(frame, &output_bbox);    // Writes frame in offline mode
+      }
     }
   }
-#endif  // VISUALIZE
+  else {                                    // No faces found
+    if (FLAG_offlineMode) {
+      faceDetectOutputVideo.write(frame);   // These two wrtite frames if a face was not detected
+      landMarkOutputVideo.write(frame);
+    }
+  }
+#else // !VISUALIZE
+  if (0 == n) err = errNoFace;
+#endif // VISUALIZE
   frameIndex++;
 
   return err;
@@ -758,34 +770,57 @@ DoApp::Err DoApp::initOfflineMode(const char *inputFilename, const char *outputF
     return Err::errVideo;
   }
 
-  std::string fdOutputVideoName, fldOutputVideoName, ffOutputVideoName;
-  std::string outputFilePrefix;
+  std::string fdOutputVideoName, fldOutputVideoName, ffOutputVideoName,
+              exprOutputFileName, shapeOutputFileName, poseOutputFileName, outputFilePrefix;
   if (outputFilename && strlen(outputFilename) != 0) {
     outputFilePrefix = outputFilename;
   } else {
     size_t lastindex = std::string(inputFilename).find_last_of(".");
     outputFilePrefix = std::string(inputFilename).substr(0, lastindex);
   }
-  fdOutputVideoName = outputFilePrefix + "_bbox.mp4";
-  fldOutputVideoName = outputFilePrefix + "_landmarks.mp4";
-  ffOutputVideoName = outputFilePrefix + "_faceModel.mp4";
+  fdOutputVideoName   = outputFilePrefix + "_bbox.mp4";
+  fldOutputVideoName  = outputFilePrefix + "_landmarks.mp4";
+  ffOutputVideoName   = outputFilePrefix + "_faceModel.mp4";
+  exprOutputFileName  = outputFilePrefix + "_expr.json";
+  shapeOutputFileName = outputFilePrefix + "_shape.json";
+  poseOutputFileName  = outputFilePrefix + "_pose.json";
 
-  if (!faceDetectOutputVideo.open(fdOutputVideoName, StringToFourcc(FLAG_captureCodec), cap.get(CV_CAP_PROP_FPS),
-                                  cv::Size(inputWidth, inputHeight))) {
+  const int codec = StringToFourcc(FLAG_captureCodec);
+  const double fps = cap.get(CV_CAP_PROP_FPS);
+  const cv::Size frameSize(inputWidth, inputHeight);
+  if (FLAG_verbose) {
+    const unsigned long long frameCount = (unsigned long long)cap.get(CV_CAP_PROP_FRAME_COUNT);
+    printf("codec='%.4s' fps=%.8g frameCount=%llu\n", (const char*)&codec, fps, frameCount);
+  }
+  if (!faceDetectOutputVideo.open(fdOutputVideoName, codec, fps, frameSize)) {
     printf("ERROR: Unable to open the output video file \"%s\" \n", fdOutputVideoName.c_str());
     return Err::errGeneral;
   }
-  if (!landMarkOutputVideo.open(fldOutputVideoName, StringToFourcc(FLAG_captureCodec), cap.get(CV_CAP_PROP_FPS),
-                                cv::Size(inputWidth, inputHeight))) {
+  if (!landMarkOutputVideo.open(fldOutputVideoName, codec, fps, frameSize)) {
     printf("ERROR: Unable to open the output video file \"%s\" \n", fldOutputVideoName.c_str());
     return Err::errGeneral;
   }
-  if (!faceFittingOutputVideo.open(ffOutputVideoName, StringToFourcc(FLAG_captureCodec), cap.get(CV_CAP_PROP_FPS),
-                                   cv::Size(inputWidth, inputHeight))) {
+  if (!faceFittingOutputVideo.open(ffOutputVideoName, codec, fps, frameSize)) {
     printf("ERROR: Unable to open the output video file \"%s\" \n", ffOutputVideoName.c_str());
     return Err::errGeneral;
   }
-
+  if (FLAG_debug) {
+    if (nullptr == (exprFile = fopen(exprOutputFileName.c_str(), "w"))) {
+      printf("ERROR: Unable to open the output  file \"%s\" \n", exprOutputFileName.c_str());
+      return Err::errGeneral;
+    }
+    fprintf(exprFile, "{\n  \"expression_series\":[");
+    if (nullptr == (shapeFile = fopen(shapeOutputFileName.c_str(), "w"))) {
+      printf("ERROR: Unable to open the output  file \"%s\" \n", shapeOutputFileName.c_str());
+      return Err::errGeneral;
+    }
+    fprintf(shapeFile, "{\n  \"shape_series\":[");
+    if (nullptr == (poseFile = fopen(poseOutputFileName.c_str(), "w"))) {
+      printf("ERROR: Unable to open the output  file \"%s\" \n", poseOutputFileName.c_str());
+      return Err::errGeneral;
+    }
+    fprintf(poseFile, "{\n  \"pose_series\":[");
+  }
   return Err::errNone;
 }
 
@@ -797,21 +832,48 @@ DoApp::Err DoApp::fitFaceModel() {
     writeVideoAndEstResults(frame, face_ar_engine.output_bboxes, face_ar_engine.getLandmarks());
   }
 
-  if (FaceEngine::Err::errNone == nvErr) {
+  frameTimer.pause();
 #ifdef VISUALIZE
-    frameTimer.pause();
+  if (FaceEngine::Err::errNone == nvErr) {                // If a face and its landmarks were detected
     if (drawVisualization) {
-      DrawFaceMesh(frame, face_ar_engine.getFaceMesh());
-      if (FLAG_offlineMode) {
+      DrawFaceMesh(frame, face_ar_engine.getFaceMesh());  // This writes a frame in offline mode ...
+      if (FLAG_offlineMode) {                             // ... as do the following two statements
         DrawLandmarkPoints(frame, face_ar_engine.getLandmarks(), face_ar_engine.getNumLandmarks());
         DrawBBoxes(frame, face_ar_engine.getLargestBox());
       }
     }
-    frameTimer.resume();
-#endif  // VISUALIZE
   } else {
+    if (FLAG_offlineMode) {
+      faceDetectOutputVideo.write(frame);   // These three will draw unannotated frames if a face was not detected
+      landMarkOutputVideo.write(frame);
+      faceFittingOutputVideo.write(frame);
+    }
     doErr = errFaceFit;
   }
+#else // !VISUALIZE
+  if (FaceEngine::Err::errNone != nvErr)
+    doErr = errFaceFit;
+#endif // VISUALIZE
+  if (FLAG_offlineMode && FLAG_debug) {
+    unsigned n;
+    const float *f;
+    if (frameIndex)
+      fprintf(exprFile, ",");
+    fprintf(exprFile, "\n    [");
+    for (n = face_ar_engine.getNumExpressionCoefficients(), f = face_ar_engine.getExpressionCoefficients(); n--; ++f)
+      fprintf(exprFile, "%8.6f%c", *f, (n ? ',' : ']'));
+    if (frameIndex)
+      fprintf(shapeFile, ",");
+    fprintf(shapeFile, "\n    [");
+    for (n = face_ar_engine.getNumShapeEigenvalues(), f = face_ar_engine.getShapeEigenvalues(); n--; ++f)
+      fprintf(shapeFile, "%+9.6f%c", *f, (n ? ',' : ']'));
+    if (frameIndex)
+      fprintf(poseFile, ",");
+    f = (const float*)face_ar_engine.getPose();
+    fprintf(poseFile, "\n    [%+9.6f,%+9.6f,%+9.6f,%+9.6f]", f[0], f[1], f[2], f[3]);
+  }
+  frameTimer.resume();
+  frameIndex++;
 
   return doErr;
 }
@@ -828,9 +890,29 @@ DoApp::DoApp() {
   nvErr = FaceEngine::errNone;
   scaleOffsetXY[0] = scaleOffsetXY[2] = 1.f;
   scaleOffsetXY[1] = scaleOffsetXY[3] = 0.f;
+  exprFile = nullptr;
+  shapeFile = nullptr;
+  poseFile = nullptr;
 }
 
-DoApp::~DoApp() {}
+DoApp::~DoApp() {
+  static const char termJsFile[] = { "\n  ]\n}\n" };
+  if (exprFile)  { fprintf(exprFile,  termJsFile); fclose(exprFile);  }
+  if (shapeFile) { fprintf(shapeFile, termJsFile); fclose(shapeFile); }
+  if (poseFile)  { fprintf(poseFile,  termJsFile); fclose(poseFile);  }
+}
+
+char *g_nvARSDKPath = NULL;
+
+int chooseGPU() {
+  // If the system has multiple supported GPUs then the application
+  // should use CUDA driver APIs or CUDA runtime APIs to enumerate
+  // the GPUs and select one based on the application's requirements
+
+  //Cuda device 0
+  return 0;
+
+}
 
 void DoApp::getFPS() {
   const float timeConstant = 16.f;
@@ -893,11 +975,6 @@ DoApp::Err DoApp::run() {
     } else if (face_ar_engine.appMode == FaceEngine::mode::faceMeshGeneration) {
       doErr = fitFaceModel();
     }
-    if ((DoApp::errNoFace == doErr || DoApp::errFaceFit == doErr) && FLAG_offlineMode) {
-      faceDetectOutputVideo.write(frame);
-      landMarkOutputVideo.write(frame);
-      faceFittingOutputVideo.write(frame);
-    }
     if (DoApp::errCancel == doErr || DoApp::errVideo == doErr) return doErr;
     if (!frame.empty() && !FLAG_offlineMode) {
       if (drawVisualization) {
@@ -907,7 +984,6 @@ DoApp::Err DoApp::run() {
       }
       cv::imshow(windowTitle, frame);
     }
-
     if (!FLAG_offlineMode) {
       int n = cv::waitKey(1);
       if (n >= 0) {
@@ -980,11 +1056,11 @@ const char *DoApp::errorStringFromCode(DoApp::Err code) {
  ********************************************************************************/
 
 int main(int argc, char **argv) {
-  DoApp app;
-  DoApp::Err doErr;
-
   // Parse the arguments
   if (0 != ParseMyArgs(argc, argv)) return -100;
+
+  DoApp app;
+  DoApp::Err doErr = DoApp::Err::errNone;
 
   app.face_ar_engine.setAppMode(FaceEngine::mode(FLAG_appMode));
 

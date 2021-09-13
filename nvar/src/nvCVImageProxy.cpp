@@ -67,7 +67,11 @@ inline int nvFreeLibrary(HINSTANCE handle) {
 HINSTANCE getNvCVImageLib() {
   TCHAR path[MAX_PATH], tmpPath[MAX_PATH], fullPath[MAX_PATH];
   static HINSTANCE nvCVImageLib = NULL;
-  static bool bSDKPathSet = false;  
+  static bool bSDKPathSet = false;
+  if (!bSDKPathSet) {
+    nvCVImageLib = nvLoadLibrary("NVCVImage");
+    if (nvCVImageLib)  bSDKPathSet = true;
+  }
   if (!bSDKPathSet) {
     // There can be multiple apps on the system,
     // some might include the SDK in the app package and
@@ -234,16 +238,28 @@ NvCV_Status NvCV_API NvCVImage_CompositeRect(
   return funcPtr(fg, fgOrg, bg, bgOrg, mat, mode, dst, dstOrg, stream);
 }
 
-NvCV_Status NvCV_API NvCVImage_CompositeOverConstant(const NvCVImage* src, const NvCVImage* mat,
-                                                        const unsigned char bgColor[3], NvCVImage* dst) {
+#if RTX_CAMERA_IMAGE == 0
+NvCV_Status NvCV_API NvCVImage_CompositeOverConstant(const NvCVImage *src, const NvCVImage *mat,
+  const void *bgColor, NvCVImage *dst, struct CUstream_st *stream) {
+  static const auto funcPtr =
+    (decltype(NvCVImage_CompositeOverConstant)*)nvGetProcAddress(getNvCVImageLib(), "NvCVImage_CompositeOverConstant");
+
+  if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
+  return funcPtr(src, mat, bgColor, dst, stream);
+}
+#else // RTX_CAMERA_IMAGE == 1
+NvCV_Status NvCV_API NvCVImage_CompositeOverConstant(const NvCVImage *src, const NvCVImage *mat,
+                                                     const unsigned char bgColor[3], NvCVImage *dst) {
   static const auto funcPtr =
       (decltype(NvCVImage_CompositeOverConstant)*)nvGetProcAddress(getNvCVImageLib(), "NvCVImage_CompositeOverConstant");
    
   if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;
   return funcPtr(src, mat, bgColor, dst);
 }
+#endif // RTX_CAMERA_IMAGE
 
-NvCV_Status NvCV_API NvCVImage_FlipY(const NvCVImage* src, NvCVImage* dst) {
+
+NvCV_Status NvCV_API NvCVImage_FlipY(const NvCVImage *src, NvCVImage *dst) {
   static const auto funcPtr = (decltype(NvCVImage_FlipY)*)nvGetProcAddress(getNvCVImageLib(), "NvCVImage_FlipY");
    
   if (nullptr == funcPtr) return NVCV_ERR_LIBRARY;

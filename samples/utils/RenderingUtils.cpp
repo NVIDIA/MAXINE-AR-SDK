@@ -52,9 +52,9 @@ void draw_wireframe(const cv::Mat& image, const NvAR_FaceMesh& mesh, const NvAR_
       glm::project({mesh.vertices[triangle.vec[2]].vec[0], mesh.vertices[triangle.vec[2]].vec[1], mesh.vertices[triangle.vec[2]].vec[2]},
         modelview, projection, viewport);
     if (are_vertices_ccw_in_screen_space(glm::vec2(p1), glm::vec2(p2), glm::vec2(p3))) {
-      cv::line(image, cv::Point(p1.x, p1.y), cv::Point(p2.x, p2.y), color);
-      cv::line(image, cv::Point(p2.x, p2.y), cv::Point(p3.x, p3.y), color);
-      cv::line(image, cv::Point(p3.x, p3.y), cv::Point(p1.x, p1.y), color);
+      cv::line(image, cv::Point2f(p1.x, p1.y), cv::Point2f(p2.x, p2.y), color);
+      cv::line(image, cv::Point2f(p2.x, p2.y), cv::Point2f(p3.x, p3.y), color);
+      cv::line(image, cv::Point2f(p3.x, p3.y), cv::Point2f(p1.x, p1.y), color);
     }
   }
 };

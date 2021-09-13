@@ -28,6 +28,8 @@
 #include <cmath>
 #include <ctime>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 
 #include "BodyEngine.h"
 #include "RenderingUtils.h"
@@ -68,7 +70,7 @@ bool FLAG_debug = false, FLAG_verbose = false, FLAG_temporal = true, FLAG_captur
      FLAG_offlineMode = false, FLAG_useCudaGraph = true;
 std::string FLAG_outDir, FLAG_inFile, FLAG_outFile, FLAG_modelPath, FLAG_captureCodec = "avc1",
             FLAG_camRes, FLAG_bodyModel;
-unsigned int FLAG_batch = 1, FLAG_appMode = 1, FLAG_mode = 1;
+unsigned int FLAG_appMode = 1, FLAG_mode = 1, FLAG_camindex=0;
 
 /********************************************************************************
  * Usage
@@ -91,7 +93,6 @@ static void Usage() {
       " --out_file=<file>                 specify the output file\n"
       " --out=<file>                      specify the output file\n"
       " --model_path=<path>               specify the directory containing the TRT models\n"
-      " --batch=<uint>                    1 - 8, used for batch inferencing in keypoints detector \n"
       " --mode[=0|1]                      Model Mode. 0: High Quality, 1: High Performance\n"
       " --app_mode[=(0|1)]                App mode. 0: Body detection, 1: Keypoint detection "
       "(Default).\n"
@@ -191,6 +192,7 @@ static int ParseMyArgs(int argc, char **argv) {
                 GetFlagArgVal("model_path", arg, &FLAG_modelPath) ||
                 GetFlagArgVal("app_mode", arg, &FLAG_appMode) ||
                 GetFlagArgVal("mode", arg, &FLAG_mode) ||
+                GetFlagArgVal("camindex", arg, &FLAG_camindex) ||
                 GetFlagArgVal("use_cuda_graph", arg, &FLAG_useCudaGraph) ||
                 GetFlagArgVal("temporal", arg, &FLAG_temporal))) {
       continue;
@@ -250,9 +252,12 @@ std::string getCalendarTime() {
   // Convert to tm to get structure holding a calendar date and time broken down into its components.
   std::tm brokenTime = *std::localtime(&currentTime);
   std::ostringstream calendarTime;
-  calendarTime << std::put_time(
-      &brokenTime,
-      "%Y-%m-%d-%H-%M-%S");  // (YYYY-MM-DD-HH-mm-ss)<Year>-<Month>-<Date>-<Hour>-<Mins>-<Seconds>
+  // calendarTime << std::put_time(
+  //     &brokenTime,
+  //     "%Y-%m-%d-%H-%M-%S");  // (YYYY-MM-DD-HH-mm-ss)<Year>-<Month>-<Date>-<Hour>-<Mins>-<Seconds>
+  char time_string[24];
+  if (0 < strftime(time_string, sizeof(time_string), "%Y-%m-%d-%H-%M-%S] ", &brokenTime))
+    calendarTime << time_string;  // (YYYY-MM-DD-HH-mm-ss)<Year>-<Month>-<Date>-<Hour>-<Mins>-<Seconds>
   // Get the time since epoch 0(Thu Jan  1 00:00:00 1970) and the remainder after division is
   // our milliseconds
   std::chrono::milliseconds currentMilliseconds =
@@ -589,7 +594,7 @@ void DoApp::DrawKeyPointsAndEdges(const cv::Mat& src, NvAR_Point2f* keypoints, i
   int right_index_knuckle = 31;
   int left_thumb_tip = 32;
   int right_thumb_tip = 33;
-  
+
   // center body
   DrawKeyPointLine(frm, keypoints, pelvis, torso, kColorGreen);
   DrawKeyPointLine(frm, keypoints, torso, neck, kColorGreen);
@@ -749,7 +754,7 @@ DoApp::Err DoApp::acquireBodyBoxAndKeyPoints() {
 }
 
 DoApp::Err DoApp::initCamera(const char *camRes) {
-  if (cap.open(0)) {
+  if (cap.open(FLAG_camindex)) {
     if (camRes) {
       int n;
       n = sscanf(camRes, "%d%*[xX]%d", &inputWidth, &inputHeight);
@@ -836,7 +841,7 @@ int chooseGPU() {
   // If the system has multiple supported GPUs then the application
   // should use CUDA driver APIs or CUDA runtime APIs to enumerate
   // the GPUs and select one based on the application's requirements
-  
+
   //Cuda device 0
   return 0;
 
@@ -974,11 +979,11 @@ int main(int argc, char **argv) {
   // Parse the arguments
   if (0 != ParseMyArgs(argc, argv)) return -100;
 
-  DoApp app; 
+  DoApp app;
   DoApp::Err doErr = DoApp::Err::errNone;
 
   app.body_ar_engine.setAppMode(BodyEngine::mode(FLAG_appMode));
-  
+
   app.body_ar_engine.setMode(FLAG_mode);
 
   if (FLAG_verbose) printf("Enable temporal optimizations in detecting body and keypoints = %d\n", FLAG_temporal);

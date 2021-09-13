@@ -1,6 +1,6 @@
 /*###############################################################################
 #
-# Copyright 2020 NVIDIA Corporation
+# Copyright 2020-2021 NVIDIA Corporation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -83,12 +83,12 @@ bool CheckResult(NvCV_Status nvErr, unsigned line);
 
 #define BAIL_IF_ERR(err)                 \
 do {                                     \
-    if (0!=err) {                        \
+    if (0 != (err)) {                    \
       goto bail;                         \
     }                                    \
   } while (0)
 
-#define BAIL_IF_CVERR(nvErr, err, code)  \
+#define BAIL_IF_NVERR(nvErr, err, code)  \
   do {                                   \
     if (!CheckResult(nvErr, __LINE__)) { \
       err = code;                        \
@@ -154,18 +154,23 @@ class FaceEngine {
   Err fitFaceModel(cv::Mat& frame);
   NvAR_FaceMesh* getFaceMesh();
   NvAR_RenderingParams* getRenderingParams();
+  float* getShapeEigenvalues();
+  float* getExpressionCoefficients();
   void setFaceStabilization(bool);
+  int getNumShapeEigenvalues();
+  int getNumExpressionCoefficients();
   Err setNumLandmarks(int);
   int getNumLandmarks() { return numLandmarks; }
   void DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose);
 
-  NvCVImage inputImageBuffer{}, tmpImage{};
+  NvCVImage inputImageBuffer{}, tmpImage{}, outputImageBuffer{};
   NvAR_FeatureHandle faceDetectHandle{}, landmarkDetectHandle{}, faceFitHandle{};
   std::vector<NvAR_Point2f> facial_landmarks;
   std::vector<float> facial_landmarks_confidence;
   std::vector<NvAR_Quaternion> facial_pose;
   NvAR_FaceMesh* face_mesh{};
   NvAR_RenderingParams* rendering_params{};
+  std::vector<float> shapeEigenvalues, expressionCoefficients;
   CUstream stream{};
   std::vector<NvAR_Rect> output_bbox_data;
   std::vector<float> output_bbox_conf_data;
@@ -177,6 +182,8 @@ class FaceEngine {
   std::string face_model;
 
   bool bStabilizeFace;
+  bool bUseOTAU;
+  char *fdOTAModelPath, *ldOTAModelPath;
 
   FaceEngine() {
     batchSize = 1;
@@ -187,8 +194,12 @@ class FaceEngine {
     input_image_width = 640;
     input_image_height = 480;
     input_image_pitch = 3 * input_image_width * sizeof(unsigned char);  // RGB
+    bUseOTAU = false;
+    fdOTAModelPath = NULL;
+    ldOTAModelPath = NULL;
   }
-  enum mode { faceDetection = 0, landmarkDetection, faceMeshGeneration } appMode;
+  enum mode { faceDetection = 0, landmarkDetection, faceMeshGeneration
+  } appMode;
   void setAppMode(FaceEngine::mode _mAppMode);
 };
 #endif

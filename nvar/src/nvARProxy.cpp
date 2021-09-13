@@ -63,18 +63,34 @@ inline int nvFreeLibrary(HINSTANCE handle) {
 HINSTANCE getNvARLib() {
 
   TCHAR path[MAX_PATH], fullPath[MAX_PATH];
+  bool bSDKPathSet = false;
 
-  // There can be multiple apps on the system,
-  // some might include the SDK in the app package and
-  // others might expect the SDK to be installed in Program Files
-  GetEnvironmentVariable(TEXT("NV_AR_SDK_PATH"), path, MAX_PATH);
-  if (_tcscmp(path, TEXT("USE_APP_PATH"))) {
-    // App has not set environment variable to "USE_APP_PATH"
-    // So pick up the SDK dll and dependencies from Program Files
-    GetEnvironmentVariable(TEXT("ProgramFiles"), path, MAX_PATH);
-    size_t max_len = sizeof(fullPath)/sizeof(TCHAR);
-    _stprintf_s(fullPath, max_len, TEXT("%s\\NVIDIA Corporation\\NVIDIA AR SDK\\"), path);
+  extern char* g_nvARSDKPath;
+  if (g_nvARSDKPath && g_nvARSDKPath[0]) {
+#ifndef UNICODE
+    strncpy_s(fullPath, MAX_PATH, g_nvARSDKPath, MAX_PATH);
+#else
+    size_t res = 0;
+    mbstowcs_s(&res, fullPath, MAX_PATH, g_nvARSDKPath, MAX_PATH);
+#endif
     SetDllDirectory(fullPath);
+    bSDKPathSet = true;
+  }
+
+  if (!bSDKPathSet) {
+  
+    // There can be multiple apps on the system,
+    // some might include the SDK in the app package and
+    // others might expect the SDK to be installed in Program Files
+    GetEnvironmentVariable(TEXT("NV_AR_SDK_PATH"), path, MAX_PATH);
+    if (_tcscmp(path, TEXT("USE_APP_PATH"))) {
+      // App has not set environment variable to "USE_APP_PATH"
+      // So pick up the SDK dll and dependencies from Program Files
+      GetEnvironmentVariable(TEXT("ProgramFiles"), path, MAX_PATH);
+      size_t max_len = sizeof(fullPath) / sizeof(TCHAR);
+      _stprintf_s(fullPath, max_len, TEXT("%s\\NVIDIA Corporation\\NVIDIA AR SDK\\"), path);
+      SetDllDirectory(fullPath);
+    }
   }
   static const HINSTANCE NvArLib = nvLoadLibrary("nvARPose");
   return NvArLib;

@@ -204,21 +204,24 @@ NvCVImage {
   //! \param[in]  dstY    The top  coordinate of the dst rectangle.
   //! \param[in]  width   The width  of the rectangle to be copied, in pixels.
   //! \param[in]  height  The height of the rectangle to be copied, in pixels.
+  //! \param[in]  stream  the CUDA stream.
   //! \note   NvCVImage_Transfer() can handle more cases.
   //! \return NVCV_SUCCESS         if successful
   //! \return NVCV_ERR_MISMATCH    if the formats are different
   //! \return NVCV_ERR_CUDA        if a CUDA error occurred
   //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not yet accommodated.
-  inline NvCV_Status copyFrom(const NvCVImage *src, int srcX, int srcY, int dstX, int dstY, unsigned width, unsigned height);
+  inline NvCV_Status copyFrom(const NvCVImage *src, int srcX, int srcY, int dstX, int dstY,
+                              unsigned width, unsigned height, struct CUstream_st* stream = 0);
 
   //! Copy from one image to another. This works for CPU->CPU, CPU->GPU, GPU->GPU, and GPU->CPU.
   //! \param[in]  src     The source image from which to copy.
+  //! \param[in]  stream  the CUDA stream.
   //! \note   NvCVImage_Transfer() can handle more cases.
   //! \return NVCV_SUCCESS         if successful
   //! \return NVCV_ERR_MISMATCH    if the formats are different
   //! \return NVCV_ERR_CUDA        if a CUDA error occurred
   //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not yet accommodated.
-  inline NvCV_Status copyFrom(const NvCVImage *src);
+  inline NvCV_Status copyFrom(const NvCVImage *src, struct CUstream_st* stream = 0);
 
 #endif // ___cplusplus
 } NvCVImage;
@@ -466,6 +469,8 @@ NvCV_Status NvCV_API NvCVImage_TransferRect(
 //! \param[in]  tmp           a staging image.
 //! \return     NVCV_SUCCESS  if the operation was completed successfully.
 //! \note       The actual transfer region may be smaller, because the rects are clipped against the images.
+//! \note       This is supplied for use with YUV buffers that do not have the standard structure
+//!             that are expected for NvCVImage_Transfer() and NvCVImage_TransferRect.
 NvCV_Status NvCV_API NvCVImage_TransferFromYUV(
   const void *y,                int yPixBytes,  int yPitch,
   const void *u, const void *v, int uvPixBytes, int uvPitch,
@@ -492,6 +497,8 @@ NvCV_Status NvCV_API NvCVImage_TransferFromYUV(
 //! \param[in]  tmp           a staging image.
 //! \return     NVCV_SUCCESS  if the operation was completed successfully.
 //! \note       The actual transfer region may be smaller, because the rects are clipped against the images.
+//! \note       This is supplied for use with YUV buffers that do not have the standard structure
+//!             that are expected for NvCVImage_Transfer() and NvCVImage_TransferRect.
 NvCV_Status NvCV_API NvCVImage_TransferToYUV(
   const NvCVImage *src, const NvCVRect2i *srcRect, 
   const void *y,                int yPixBytes,  int yPitch,
@@ -507,7 +514,9 @@ NvCV_Status NvCV_API NvCVImage_TransferToYUV(
 //! \param[in,out]  im      the image to be mapped.
 //! \param[in]      stream  the stream on which the mapping is to be performed.
 //! \return         NVCV_SUCCESS is the operation was completed successfully.
-NvCV_Status NvCV_API NvCVImage_MapResource(NvCVImage *im, struct CUstream_st *stream);
+//! \note           This is an experimental API. If you find it useful, please respond to XXX@YYY.com,
+//!                 otherwise we may drop support.
+/* EXPERIMENTAL */ NvCV_Status NvCV_API NvCVImage_MapResource(NvCVImage *im, struct CUstream_st *stream);
 
 
 //! After transfer by CUDA, the texture resource must be unmapped in order to be used by the graphics system again.
@@ -516,7 +525,9 @@ NvCV_Status NvCV_API NvCVImage_MapResource(NvCVImage *im, struct CUstream_st *st
 //! \param[in,out]  im      the image to be mapped.
 //! \param[in]      stream  the CUDA stream on which the mapping is to be performed.
 //! \return         NVCV_SUCCESS is the operation was completed successfully.
-NvCV_Status NvCV_API NvCVImage_UnmapResource(NvCVImage *im, struct CUstream_st *stream);
+//! \note           This is an experimental API. If you find it useful, please respond to XXX@YYY.com,
+//!                 otherwise we may drop support.
+/* EXPERIMENTAL */ NvCV_Status NvCV_API NvCVImage_UnmapResource(NvCVImage *im, struct CUstream_st *stream);
 
 
 //! Composite one source image over another using the given matte.
@@ -530,6 +541,7 @@ NvCV_Status NvCV_API NvCVImage_UnmapResource(NvCVImage *im, struct CUstream_st *
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
 //! \return NVCV_ERR_MISMATCH    if either the fg & bg & dst formats do not match, or if fg & bg & dst & mat are not
 //!                              in the same address space (CPU or GPU).
+//! \bug  Though RGBA destinations are accommodated, the A channel is not updated at all.
 #if RTX_CAMERA_IMAGE == 0
 NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *bg, const NvCVImage *mat, NvCVImage *dst,
             struct CUstream_st *stream);
@@ -537,8 +549,9 @@ NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *b
 NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *bg, const NvCVImage *mat, NvCVImage *dst);
 #endif // RTX_CAMERA_IMAGE == 1
 
+
 //! Composite one source image over another using the given matte.
-//! Not all pixel format combinations are accommodated.
+//! This accommodates all RGB and RGBA formats, with u8 and f32 components.
 //! \param[in]      fg      the foreground source image.
 //! \param[in]      fgOrg   the upper-left corner of the fg image to be composited (NULL implies (0,0)).
 //! \param[in]      bg      the background source image.
@@ -566,17 +579,27 @@ NvCV_Status NvCV_API NvCVImage_CompositeRect(
     NvCVImage       *dst, const NvCVPoint2i *dstOrg,
     struct CUstream_st *stream);
 
-//! Composite a BGRu8 source image over a constant color field using the given matte.
-//! \param[in]      src     the source BGRu8 (or RGBu8) image.
-//! \param[in]      mat     the matte  Yu8   (or Au8)   image, indicating where the src should come through.
-//! \param[in]      bgColor the desired flat background color, with the same component ordering as the src and dst.
-//! \param[in,out]  dst     the destination BGRu8 (or RGBu8) image. May be the same as src.
+
+//! Composite a source image over a constant color field using the given matte.
+//! \param[in]      src     the source image.
+//! \param[in]      mat     the matte  image, indicating where the src should come through.
+//! \param[in]      bgColor pointer to a location holding the desired flat background color, with the same format
+//!                         and component ordering as the dst. This acts as a 1x1 background pixel buffer,
+//!                         so should reside in the same memory space (CUDA or CPU) as the other buffers.
+//! \param[in,out]  dst     the destination image. May be the same as src.
 //! \return NVCV_SUCCESS         if the operation was successful.
 //! \return NVCV_ERR_PIXELFORMAT if the pixel format is not accommodated.
-//! \bug    This is only implemented for 3-component u8 src and dst, and 1-component mat,
-//!         where all images are resident on the CPU.
+//! \return NVCV_ERR_MISMATCH    if fg & mat & dst & bgColor are not in the same address space (CPU or GPU).
+//! \note   The bgColor must remain valid until complete; this is an important consideration especially if
+//!         the buffers are on the GPU and NvCVImage_CompositeOverConstant() runs asynchronously.
+//! \bug    Though RGBA destinations are accommodated, the A channel is not updated at all.
 NvCV_Status NvCV_API NvCVImage_CompositeOverConstant(
-              const NvCVImage *src, const NvCVImage *mat, const unsigned char bgColor[3], NvCVImage *dst);
+#if RTX_CAMERA_IMAGE == 0
+    const NvCVImage *src, const NvCVImage *mat, const void *bgColor, NvCVImage *dst, struct CUstream_st *stream
+#else // RTX_CAMERA_IMAGE == 1
+    const NvCVImage *src, const NvCVImage *mat, const unsigned char bgColor[3], NvCVImage *dst
+#endif // RTX_CAMERA_IMAGE
+);
 
 
 //! Flip the image vertically.
@@ -649,16 +672,16 @@ NvCVImage::~NvCVImage() { NvCVImage_Dealloc(this); }
  ********************************************************************************/
 
 NvCV_Status NvCVImage::copyFrom(const NvCVImage *src, int srcX, int srcY, int dstX, int dstY, unsigned wd,
-                                  unsigned ht) {
+                                  unsigned ht, struct CUstream_st* stream) {
 #if RTX_CAMERA_IMAGE // This only works for chunky images
   NvCVImage srcView, dstView;
   NvCVImage_InitView(&srcView, const_cast<NvCVImage *>(src), srcX, srcY, wd, ht);
   NvCVImage_InitView(&dstView, this, dstX, dstY, wd, ht);
-  return NvCVImage_Transfer(&srcView, &dstView, 1.f, 0, nullptr);
+  return NvCVImage_Transfer(&srcView, &dstView, 1.f, stream, nullptr);
 #else // !RTX_CAMERA_IMAGE bug fix for non-chunky images
   NvCVRect2i  srcRect = { (int)srcX, (int)srcY, (int)wd, (int)ht };
   NvCVPoint2i dstPt   = { (int)dstX, (int)dstY };
-  return NvCVImage_TransferRect(src, &srcRect, this, &dstPt, 1.f, 0, nullptr);
+  return NvCVImage_TransferRect(src, &srcRect, this, &dstPt, 1.f, stream, nullptr);
 #endif // RTX_CAMERA_IMAGE
 }
 
@@ -666,7 +689,9 @@ NvCV_Status NvCVImage::copyFrom(const NvCVImage *src, int srcX, int srcY, int ds
  * copy image
  ********************************************************************************/
 
-NvCV_Status NvCVImage::copyFrom(const NvCVImage *src) { return NvCVImage_Transfer(src, this, 1.f, 0, nullptr); }
+NvCV_Status NvCVImage::copyFrom(const NvCVImage *src, struct CUstream_st* stream) {
+  return NvCVImage_Transfer(src, this, 1.f, stream, nullptr);
+}
 
 
 #endif // ___cplusplus

@@ -1,0 +1,6 @@
+Changelog (v0.7.6.2)
+ - 3D Body Pose Keypoint Tracking
+    - Quality improvement in accuracy and stability
+    - Property NvAR_Parameter_Config(NVAR_MODE) is now NvAR_Parameter_Config(Mode)
+ - Migrated to TensorRT 8.0.1.6
+ - Migrated to CUDA 11.3u1

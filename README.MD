@@ -18,7 +18,7 @@ The SDK has the following features:
 <img src="https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/resources/ar_004.png" alt="Face 3D mesh and tracking" width="320" height="180"/>
 </p>
 </p><p align="center">
-<img src="https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/resources/ar_005.png" alt="3D Body Pose and tracking" width="320" height="180"/>
+<img src="https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/resources/ar_005.png" alt="Body 3D Pose and tracking" width="480" height="270"/>
 </p>
 
 The SDK provides two sample applications that demonstrate the features listed above in real time by using a webcam or offline videos.
@@ -28,17 +28,19 @@ The SDK provides two sample applications that demonstrate the features listed ab
 NVIDIA MAXINE AR SDK is distributed in the following parts:
 
 - This open source repository that includes the [SDK API and proxy linking source code](https://github.com/NVIDIA/MAXINE-AR-SDK/tree/master/nvar), and [sample applications and their dependency libraries](https://github.com/NVIDIA/MAXINE-AR-SDK/tree/master/samples).
-- An installer hosted on [NVIDIA Maxine developer page](https://www.nvidia.com/broadcast-sdk-resources) that installs the SDK DLLs, the models, and the SDK dependency libraries.
+- An installer hosted on [NVIDIA Maxine End-user Redistributables page](https://www.nvidia.com/broadcast-sdk-resources) that installs the SDK DLLs, the models, and the SDK dependency libraries.
 
-Please refer to [SDK programming guide](https://github.com/NVIDIA/MAXINE-AR-SDK/blob/master/docs/NVIDIA%20AR%20SDK%20Programming%20Guide.pdf) for configuring and integrating the SDK, compiling and running the sample applications. Please visit the [NVIDIA MAXINE AR SDK](https://developer.nvidia.com/maxine-getting-started) webpage for more information about the SDK.
+Please refer to [SDK System guide](https://docs.nvidia.com/deeplearning/maxine/ar-sdk-system-guide/index.html) for configuring and integrating the SDK, compiling and running the sample applications. Please visit the [NVIDIA MAXINE AR SDK](https://developer.nvidia.com/maxine-getting-started) webpage for more information about the SDK.
 
 ## System requirements
 The SDK is supported on NVIDIA GPUs that are based on the NVIDIA® Turing™ or Ampere™ architecture and have Tensor Cores.
 
-* Windows OS supported: 64-bit Windows 10
-* Microsoft Visual Studio: 2015 (MSVC14.0) or later
+* Windows OS supported: 64-bit Windows 10 or later
+* Microsoft Visual Studio: 2017 (MSVC15.0) or later
 * CMake: v3.12 or later
-* NVIDIA Graphics Driver for Windows: 455.57 or later
+* NVIDIA Graphics Driver for Windows: 465.89 or later
+* NVIDIA CUDA Toolkit: 11.3.1
+* NVIDIA TensorRT: 8.0.1.6
 
 ## NVIDIA MAXINE Branding Guidelines
 If you integrate an NVIDIA MAXINE SDK within your product, please follow the required branding guidelines that are available [here](
@@ -65,4 +67,16 @@ The open source repository includes the source code to build the sample applicat
 3.  Use Visual Studio to generate the FaceTrack.exe or BodyTrack.exe file from the NvAR_SDK.sln file.
 *	In CMake, to open Visual Studio, click Open Project.
 *	In Visual Studio, select Build > Build Solution.
+
+## Documentation
+
+Please refer to the online documentation guides -
+* [NVIDIA AR SDK Programming Guide](https://docs.nvidia.com/deeplearning/maxine/ar-sdk-programming-guide/index.html)
+* [NVIDIA AR SDK System Guide](https://docs.nvidia.com/deeplearning/maxine/ar-sdk-system-guide/index.html)
+* [NvCVImage API Guide](https://docs.nvidia.com/deeplearning/maxine/nvcvimage-api-guide/index.html)
+
+PDF versions of these guides are also available at the following locations - 
+* [NVIDIA AR SDK Programming Guide](https://docs.nvidia.com/deeplearning/maxine/pdf/ar-sdk-programming-guide.pdf)
+* [NVIDIA AR SDK System Guide](https://docs.nvidia.com/deeplearning/maxine/pdf/ar-sdk-system-guide.pdf)
+* [NvCVImage API Guide](https://docs.nvidia.com/deeplearning/maxine/pdf/nvcvimage-api-guide.pdf)
 

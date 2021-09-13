@@ -26,13 +26,14 @@ extern "C" {
 //! Initialize an NvCVImage from a D3D11 texture.
 //! The pixelFormat and component types with be transferred over, and a cudaGraphicsResource will be registered;
 //! the NvCVImage destructor will unregister the resource.
-//! This is designed to work with NvCVImage_TransferFromArray() (and eventually NvCVImage_Transfer());
-//! however it is necessary to call NvCVImage_MapResource beforehand, and NvCVImage_UnmapResource
-//! before allowing D3D to render into it.
+//! It is necessary to call NvCVImage_MapResource() after rendering D3D and before calling  NvCVImage_Transfer(),
+//! and to call NvCVImage_UnmapResource() before rendering in D3D again.
 //! \param[in,out]  im  the image to be initialized.
 //! \param[in]      tx  the texture to be used for initialization.
 //! \return         NVCV_SUCCESS if successful.
-NvCV_Status NvCV_API NvCVImage_InitFromD3D11Texture(NvCVImage *im, struct ID3D11Texture2D *tx);
+//! \note           This is an experimental API. If you find it useful, please respond to XXX@YYY.com,
+//!                 otherwise we may drop support.
+/* EXPERIMENTAL */ NvCV_Status NvCV_API NvCVImage_InitFromD3D11Texture(NvCVImage *im, struct ID3D11Texture2D *tx);
 
 
 
