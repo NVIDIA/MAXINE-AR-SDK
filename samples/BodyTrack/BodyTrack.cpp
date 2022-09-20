@@ -37,6 +37,13 @@
 #include "nvAR_defs.h"
 #include "opencv2/opencv.hpp"
 
+#if CV_MAJOR_VERSION >= 4
+#define CV_CAP_PROP_FRAME_WIDTH cv::CAP_PROP_FRAME_WIDTH
+#define CV_CAP_PROP_FRAME_HEIGHT cv::CAP_PROP_FRAME_HEIGHT
+#define CV_CAP_PROP_FPS cv::CAP_PROP_FPS
+#define CV_CAP_PROP_FRAME_COUNT cv::CAP_PROP_FRAME_COUNT
+#endif
+
 #ifndef M_PI
 #define M_PI 3.1415926535897932385
 #endif /* M_PI */
@@ -62,6 +69,8 @@
 
 #define DEBUG_RUNTIME
 
+#define PEOPLE_TRACKING_BATCH_SIZE 8
+
 /********************************************************************************
  * Command-line arguments
  ********************************************************************************/
@@ -71,7 +80,10 @@ bool FLAG_debug = false, FLAG_verbose = false, FLAG_temporal = true, FLAG_captur
 std::string FLAG_outDir, FLAG_inFile, FLAG_outFile, FLAG_modelPath, FLAG_captureCodec = "avc1",
             FLAG_camRes, FLAG_bodyModel;
 unsigned int FLAG_appMode = 1, FLAG_mode = 1, FLAG_camindex=0;
-
+#if NV_MULTI_OBJECT_TRACKER
+bool FLAG_enablePeopleTracking = false;
+unsigned int FLAG_shadowTrackingAge = 90, FLAG_probationAge = 10, FLAG_maxTargetsTracked = 30;
+#endif
 /********************************************************************************
  * Usage
  ********************************************************************************/
@@ -95,6 +107,12 @@ static void Usage() {
       " --model_path=<path>               specify the directory containing the TRT models\n"
       " --mode[=0|1]                      Model Mode. 0: High Quality, 1: High Performance\n"
       " --app_mode[=(0|1)]                App mode. 0: Body detection, 1: Keypoint detection "
+#if NV_MULTI_OBJECT_TRACKER
+	  " --enable_people_tracking[=(0|1)]  Enables people tracking "
+	  " --shadow_tracking_age             Shadow Tracking Age after which tracking information of a person is removed. Measured in frames"
+      " --probation_age                   Length of probationary period. Measured in frames"
+	  " --max_targets_tracked             Maximum number of targets to be tracked "
+#endif
       "(Default).\n"
       " --benchmarks[=<pattern>]          run benchmarks\n");
 }
@@ -194,6 +212,12 @@ static int ParseMyArgs(int argc, char **argv) {
                 GetFlagArgVal("mode", arg, &FLAG_mode) ||
                 GetFlagArgVal("camindex", arg, &FLAG_camindex) ||
                 GetFlagArgVal("use_cuda_graph", arg, &FLAG_useCudaGraph) ||
+#if NV_MULTI_OBJECT_TRACKER
+				GetFlagArgVal("enable_people_tracking", arg, &FLAG_enablePeopleTracking) ||
+				GetFlagArgVal("shadow_tracking_age", arg, &FLAG_shadowTrackingAge) ||
+                GetFlagArgVal("probation_age", arg, &FLAG_probationAge) ||
+				GetFlagArgVal("max_targets_tracked", arg, &FLAG_maxTargetsTracked) ||
+#endif
                 GetFlagArgVal("temporal", arg, &FLAG_temporal))) {
       continue;
     } else if (GetFlagArgVal("help", arg, &help)) {
@@ -231,10 +255,11 @@ enum {
 #if 1
 class MyTimer {
  public:
-  void start() { t0 = std::chrono::high_resolution_clock::now(); }       /**< Start  the timer. */
-  void pause() { dt = std::chrono::high_resolution_clock::now() - t0; }  /**< Pause  the timer. */
-  void resume() { t0 = std::chrono::high_resolution_clock::now() - dt; } /**< Resume the timer. */
-  void stop() { pause(); }                                               /**< Stop   the timer. */
+  MyTimer()     { dt = dt.zero();                                      }  /**< Clear the duration to 0. */
+  void start()  { t0 = std::chrono::high_resolution_clock::now();      }  /**< Start  the timer. */
+  void pause()  { dt = std::chrono::high_resolution_clock::now() - t0; }  /**< Pause  the timer. */
+  void resume() { t0 = std::chrono::high_resolution_clock::now() - dt; }  /**< Resume the timer. */
+  void stop()   { pause();                                             }  /**< Stop   the timer. */
   double elapsedTimeFloat() const {
     return std::chrono::duration<double>(dt).count();
   } /**< Report the elapsed time as a float. */
@@ -310,14 +335,23 @@ class DoApp {
   Err run();
   void drawFPS(cv::Mat &img);
   void DrawBBoxes(const cv::Mat &src, NvAR_Rect *output_bbox);
+  //TODO: Look into ways of simplifying the app for these functions.
+  void DrawBBoxes(const cv::Mat &src, NvAR_BBoxes *output_bbox);
+  void DrawBBoxes(const cv::Mat &src, NvAR_TrackingBBoxes *output_bbox);
   void DrawKeyPointLine(const cv::Mat& src, NvAR_Point2f* keypoints, int point1, int point2, int color);
-  void DrawKeyPointsAndEdges(const cv::Mat &src, NvAR_Point2f *keypoints, int numKeyPoints, NvAR_Rect* output_bbox);
+  void DrawKeyPointsAndEdges(const cv::Mat &src, NvAR_Point2f *keypoints, int numKeyPoints, NvAR_BBoxes* output_bbox);
   void drawKalmanStatus(cv::Mat &img);
   void drawVideoCaptureStatus(cv::Mat &img);
   void processKey(int key);
   void writeVideoAndEstResults(const cv::Mat &frame, NvAR_BBoxes output_bboxes, NvAR_Point2f *keypoints = NULL);
   void writeFrameAndEstResults(const cv::Mat &frame, NvAR_BBoxes output_bboxes, NvAR_Point2f *keypoints = NULL);
   void writeEstResults(std::ofstream &outputFile, NvAR_BBoxes output_bboxes, NvAR_Point2f *keypoints = NULL);
+#if NV_MULTI_OBJECT_TRACKER
+  void DrawKeyPointsAndEdges(const cv::Mat &src, NvAR_Point2f *keypoints, int numKeyPoints, NvAR_TrackingBBoxes* output_bbox);
+  void writeVideoAndEstResults(const cv::Mat &frame, NvAR_TrackingBBoxes output_bboxes, NvAR_Point2f *keypoints = NULL);
+  void writeFrameAndEstResults(const cv::Mat &frame, NvAR_TrackingBBoxes output_bboxes, NvAR_Point2f *keypoints = NULL);
+  void writeEstResults(std::ofstream &outputFile, NvAR_TrackingBBoxes output_bboxes, NvAR_Point2f *keypoints = NULL);
+#endif
   void getFPS();
   static const char *errorStringFromCode(Err code);
 
@@ -337,6 +371,10 @@ class DoApp {
   float expr[6];
   bool drawVisualization, showFPS, captureVideo, captureFrame;
   float scaleOffsetXY[4];
+#if NV_MULTI_OBJECT_TRACKER
+  std::vector<cv::Scalar> colorCodes = { cv::Scalar(255,255,255) };
+  const unsigned int peopleTrackingBatchSize = 8; // Batch Size has to be 8 when people tracking is enabled
+#endif
 };
 
 DoApp *gApp = nullptr;
@@ -347,13 +385,17 @@ void DoApp::processKey(int key) {
     case '2':
       body_ar_engine.destroyFeatures();
       body_ar_engine.setAppMode(BodyEngine::mode::keyPointDetection);
-      body_ar_engine.createFeatures(FLAG_modelPath.c_str());
+#if NV_MULTI_OBJECT_TRACKER
+      if (FLAG_enablePeopleTracking) body_ar_engine.createFeatures(FLAG_modelPath.c_str());
+      else
+#endif
+	     body_ar_engine.createFeatures(FLAG_modelPath.c_str(), 1);
       body_ar_engine.initFeatureIOParams();
       break;
     case '1':
       body_ar_engine.destroyFeatures();
       body_ar_engine.setAppMode(BodyEngine::mode::bodyDetection);
-      body_ar_engine.createFeatures(FLAG_modelPath.c_str());
+      body_ar_engine.createFeatures(FLAG_modelPath.c_str(), 1);
       body_ar_engine.initFeatureIOParams();
       break;
     case 'C':
@@ -381,8 +423,11 @@ DoApp::Err DoApp::initBodyEngine(const char *modelPath) {
   if (!cap.isOpened()) return errVideo;
 
   int numKeyPoints = body_ar_engine.getNumKeyPoints();
-
-  nvErr = body_ar_engine.createFeatures(modelPath);
+#if NV_MULTI_OBJECT_TRACKER 
+  if (FLAG_enablePeopleTracking) nvErr = body_ar_engine.createFeatures(modelPath, peopleTrackingBatchSize);
+  else 
+#endif
+      nvErr = body_ar_engine.createFeatures(modelPath, 1);
 
 #ifdef DEBUG
   detector->setOutputLocation(outputDir);
@@ -425,6 +470,51 @@ void DoApp::DrawBBoxes(const cv::Mat &src, NvAR_Rect *output_bbox) {
   if (FLAG_offlineMode) bodyDetectOutputVideo.write(frm);
 }
 
+void DoApp::DrawBBoxes(const cv::Mat &src, NvAR_BBoxes *output_bbox) {
+	cv::Mat frm;
+	if (FLAG_offlineMode)
+		frm = src.clone();
+	else
+		frm = src;
+
+	if (output_bbox) {
+		for (int i = 0; i < output_bbox->num_boxes; i++) {
+			auto color = cv::Scalar(255, 255, 255);
+			cv::rectangle(frm, cv::Point(lround(output_bbox->boxes[i].x), lround(output_bbox->boxes[i].y)),
+				cv::Point(lround(output_bbox->boxes[i].x + output_bbox->boxes[i].width), lround(output_bbox->boxes[i].y + output_bbox->boxes[i].height)),
+				cv::Scalar(255, 0, 0), 2);	
+		}
+		
+	}
+		
+	if (FLAG_offlineMode) bodyDetectOutputVideo.write(frm);
+}
+#if NV_MULTI_OBJECT_TRACKER
+void DoApp::DrawBBoxes(const cv::Mat &src, NvAR_TrackingBBoxes *output_bbox) {
+	cv::Mat frm;
+	if (FLAG_offlineMode)
+		frm = src.clone();
+	else
+		frm = src;
+
+	if (output_bbox) {
+		for (int i = 0; i < output_bbox->num_boxes; i++) {
+			if (colorCodes.size() <= output_bbox->boxes[i].tracking_id)
+				colorCodes.push_back(cv::Scalar(rand() & 0xFF, rand() & 0xFF, rand() & 0xFF));
+			auto color = colorCodes[output_bbox->boxes[i].tracking_id];
+			std::string text = "ID: " + std::to_string(output_bbox->boxes[i].tracking_id);
+			
+			cv::rectangle(frm, cv::Point(lround(output_bbox->boxes[i].bbox.x), lround(output_bbox->boxes[i].bbox.y)),
+				cv::Point(lround(output_bbox->boxes[i].bbox.x + output_bbox->boxes[i].bbox.width), lround(output_bbox->boxes[i].bbox.y + output_bbox->boxes[i].bbox.height)),
+				color, 2);
+			cv::putText(frm, text, cv::Point(lround(output_bbox->boxes[i].bbox.x), lround(output_bbox->boxes[i].bbox.y) - 10), cv::FONT_HERSHEY_SIMPLEX, 0.9, color, 2);
+			}
+
+	}
+
+	if (FLAG_offlineMode) bodyDetectOutputVideo.write(frm);
+}
+#endif
 void DoApp::writeVideoAndEstResults(const cv::Mat &frm, NvAR_BBoxes output_bboxes, NvAR_Point2f* keypoints) {
   if (captureVideo) {
     if (!capturedVideo.isOpened()) {
@@ -469,7 +559,54 @@ void DoApp::writeVideoAndEstResults(const cv::Mat &frm, NvAR_BBoxes output_bboxe
     }
   }
 }
-
+#if NV_MULTI_OBJECT_TRACKER
+void DoApp::writeVideoAndEstResults(const cv::Mat &frm, NvAR_TrackingBBoxes output_bboxes, NvAR_Point2f* keypoints) {
+	if (captureVideo) {
+		if (!capturedVideo.isOpened()) {
+			const std::string currentCalendarTime = getCalendarTime();
+			const std::string capturedOutputFileName = currentCalendarTime + ".mp4";
+			getFPS();
+			if (frameTime) {
+				float fps = (float)(1.0 / frameTime);
+				capturedVideo.open(capturedOutputFileName, StringToFourcc(FLAG_captureCodec), fps,
+					cv::Size(frm.cols, frm.rows));
+				if (!capturedVideo.isOpened()) {
+					std::cout << "Error: Could not open video: \"" << capturedOutputFileName << "\"\n";
+					return;
+				}
+				if (FLAG_verbose) {
+					std::cout << "Capturing video started" << std::endl;
+				}
+			}
+			else {  // If frameTime is 0.f, returns without writing the frame to the Video
+				return;
+			}
+			const std::string outputsFileName = currentCalendarTime + ".txt";
+			bodyEngineVideoOutputFile.open(outputsFileName, std::ios_base::out);
+			if (!bodyEngineVideoOutputFile.is_open()) {
+				std::cout << "Error: Could not open file: \"" << outputsFileName << "\"\n";
+				return;
+			}
+			std::string keyPointDetectionMode = (keypoints == NULL) ? "Off" : "On";
+			bodyEngineVideoOutputFile << "// BodyDetectOn, KeyPointDetect" << keyPointDetectionMode << "\n ";
+			bodyEngineVideoOutputFile
+				<< "// kNumPeople, (bbox_x, bbox_y, bbox_w, bbox_h){ kNumPeople}, kNumLMs, [lm_x, lm_y]{kNumLMs}\n";
+		}
+		// Write each frame to the Video
+		capturedVideo << frm;
+		writeEstResults(bodyEngineVideoOutputFile, output_bboxes, keypoints);
+	}
+	else {
+		if (capturedVideo.isOpened()) {
+			if (FLAG_verbose) {
+				std::cout << "Capturing video ended" << std::endl;
+			}
+			capturedVideo.release();
+			if (bodyEngineVideoOutputFile.is_open()) bodyEngineVideoOutputFile.close();
+		}
+	}
+}
+#endif
 void DoApp::writeEstResults(std::ofstream &outputFile, NvAR_BBoxes output_bboxes, NvAR_Point2f* keypoints) {
   /**
    * Output File Format :
@@ -512,7 +649,53 @@ void DoApp::writeEstResults(std::ofstream &outputFile, NvAR_BBoxes output_bboxes
 
   outputFile << "\n";
 }
+#if NV_MULTI_OBJECT_TRACKER
+void DoApp::writeEstResults(std::ofstream &outputFile, NvAR_TrackingBBoxes output_bboxes, NvAR_Point2f* keypoints) {
+	/**
+	 * Output File Format :
+	 * BodyDetectOn, KeyPointDetectOn
+	 * kNumPeople, (bbox_x, bbox_y, bbox_w, bbox_h){ kNumPeople}, kNumKPs, [j_x, j_y]{kNumKPs}
+	 */
 
+	int bodyDetectOn = (body_ar_engine.appMode == BodyEngine::mode::bodyDetection ||
+		body_ar_engine.appMode == BodyEngine::mode::keyPointDetection)
+		? 1
+		: 0;
+	int keyPointDetectOn = (body_ar_engine.appMode == BodyEngine::mode::keyPointDetection)
+		? 1
+		: 0;
+	outputFile << bodyDetectOn << "," << keyPointDetectOn << "\n";
+
+	if (bodyDetectOn && output_bboxes.num_boxes) {
+		// Append number of bodies detected in the current frame
+		outputFile << unsigned(output_bboxes.num_boxes) << ",";
+		// write outputbboxes to outputFile
+		for (size_t i = 0; i < output_bboxes.num_boxes; i++) {
+			int x1 = (int)output_bboxes.boxes[i].bbox.x, y1 = (int)output_bboxes.boxes[i].bbox.y,
+				width = (int)output_bboxes.boxes[i].bbox.width, height = (int)output_bboxes.boxes[i].bbox.height;
+			unsigned int tracking_id = output_bboxes.boxes[i].tracking_id;
+			outputFile << x1 << "," << y1 << "," << width << "," << height << "," << tracking_id << ",";
+		}
+	}
+	else {
+		outputFile << "0,";
+	}
+	if (keyPointDetectOn && output_bboxes.num_boxes) {
+		int numKeyPoints = body_ar_engine.getNumKeyPoints();
+		// Append number of keypoints
+		outputFile << numKeyPoints << ",";
+		// Append 2 * number of keypoint values
+		NvAR_Point2f *pt, *endPt;
+		for (endPt = (pt = (NvAR_Point2f *)keypoints) + numKeyPoints; pt < endPt; ++pt)
+			outputFile << pt->x << "," << pt->y << ",";
+	}
+	else {
+		outputFile << "0,";
+	}
+
+	outputFile << "\n";
+}
+#endif
 void DoApp::writeFrameAndEstResults(const cv::Mat &frm, NvAR_BBoxes output_bboxes, NvAR_Point2f* keypoints) {
   if (captureFrame) {
     const std::string currentCalendarTime = getCalendarTime();
@@ -537,28 +720,47 @@ void DoApp::writeFrameAndEstResults(const cv::Mat &frm, NvAR_BBoxes output_bboxe
     captureFrame = false;
   }
 }
-
+#if NV_MULTI_OBJECT_TRACKER
+void DoApp::writeFrameAndEstResults(const cv::Mat &frm, NvAR_TrackingBBoxes output_bboxes, NvAR_Point2f* keypoints) {
+	if (captureFrame) {
+		const std::string currentCalendarTime = getCalendarTime();
+		const std::string capturedFrame = currentCalendarTime + ".png";
+		cv::imwrite(capturedFrame, frm);
+		if (FLAG_verbose) {
+			std::cout << "Captured the frame" << std::endl;
+		}
+		// Write Body Engine Outputs
+		const std::string outputFilename = currentCalendarTime + ".txt";
+		std::ofstream outputFile;
+		outputFile.open(outputFilename, std::ios_base::out);
+		if (!outputFile.is_open()) {
+			std::cout << "Error: Could not open file: \"" << outputFilename << "\"\n";
+			return;
+		}
+		std::string keyPointDetectionMode = (keypoints == NULL) ? "Off" : "On";
+		outputFile << "// BodyDetectOn, KeyPointDetect" << keyPointDetectionMode << "\n";
+		outputFile << "// kNumPeople, (bbox_x, bbox_y, bbox_w, bbox_h){ kNumPeople}, kNumLMs, [lm_x, lm_y]{kNumLMs}\n";
+		writeEstResults(outputFile, output_bboxes, keypoints);
+		if (outputFile.is_open()) outputFile.close();
+		captureFrame = false;
+	}
+}
+#endif
 void DoApp::DrawKeyPointLine(const cv::Mat& src, NvAR_Point2f* keypoints, int point1, int point2, int color) {
   NvAR_Point2f point1_pos = *(keypoints + point1);
   NvAR_Point2f point2_pos = *(keypoints + point2);
   cv::line(src, cv::Point((int)point1_pos.x, (int)point1_pos.y), cv::Point((int)point2_pos.x, (int)point2_pos.y), cv_colors[color], 2);
 
 }
-
-void DoApp::DrawKeyPointsAndEdges(const cv::Mat& src, NvAR_Point2f* keypoints, int numKeyPoints, NvAR_Rect* output_bbox) {
+#if NV_MULTI_OBJECT_TRACKER
+void DoApp::DrawKeyPointsAndEdges(const cv::Mat& src, NvAR_Point2f* keypoints, int numKeyPoints, NvAR_TrackingBBoxes* output_bbox) {
   cv::Mat frm;
   if (FLAG_offlineMode)
     frm = src.clone();
   else
     frm = src;
   NvAR_Point2f *pt, *endPt;
-  for (endPt = (pt = (NvAR_Point2f *)keypoints) + numKeyPoints; pt < endPt; ++pt)
-    cv::circle(frm, cv::Point(lround(pt->x), lround(pt->y)), 4, cv::Scalar(180, 180, 180), -1);
-
-  if (output_bbox)
-      cv::rectangle(frm, cv::Point(lround(output_bbox->x), lround(output_bbox->y)),
-          cv::Point(lround(output_bbox->x + output_bbox->width), lround(output_bbox->y + output_bbox->height)),
-          cv::Scalar(255, 0, 0), 2);
+  NvAR_Point2f* keypointsBatch8 = keypoints;
 
   int pelvis = 0;
   int left_hip = 1;
@@ -595,55 +797,186 @@ void DoApp::DrawKeyPointsAndEdges(const cv::Mat& src, NvAR_Point2f* keypoints, i
   int left_thumb_tip = 32;
   int right_thumb_tip = 33;
 
-  // center body
-  DrawKeyPointLine(frm, keypoints, pelvis, torso, kColorGreen);
-  DrawKeyPointLine(frm, keypoints, torso, neck, kColorGreen);
-  DrawKeyPointLine(frm, keypoints, neck, pelvis, kColorGreen);
+  for (int i = 0; i < body_ar_engine.output_tracking_bboxes.num_boxes; i++) {
 
-  // right side
-  DrawKeyPointLine(frm, keypoints, right_ankle, right_knee, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_knee, right_hip, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_hip, pelvis, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_hip, right_shoulder, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_shoulder, right_elbow, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_elbow, right_wrist, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_shoulder, neck, kColorRed);
+	  keypoints = keypointsBatch8 + (i * 34);
 
-  // right side hand and feet
-  DrawKeyPointLine(frm, keypoints, right_wrist, right_pinky_knuckle, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_wrist, right_middle_tip, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_wrist, right_index_knuckle, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_wrist, right_thumb_tip, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_ankle, right_heel, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_ankle, right_big_toe, kColorRed);
-  DrawKeyPointLine(frm, keypoints, right_big_toe, right_small_toe, kColorRed);
+	  for (endPt = (pt = (NvAR_Point2f*)keypoints) + numKeyPoints; pt < endPt; ++pt)
+		  cv::circle(frm, cv::Point(lround(pt->x), lround(pt->y)), 4, cv::Scalar(180, 180, 180), -1);
 
-  //left side
-  DrawKeyPointLine(frm, keypoints, left_ankle, left_knee, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_knee, left_hip, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_hip, pelvis, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_hip, left_shoulder, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_shoulder, left_elbow, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_elbow, left_wrist, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_shoulder, neck, kColorBlue);
+	  if (output_bbox) {
+		  while (colorCodes.size()<= output_bbox->boxes[i].tracking_id)
+				  colorCodes.push_back(cv::Scalar(rand() & 0xFF, rand() & 0xFF, rand() & 0xFF));
+		  auto color = colorCodes[output_bbox->boxes[i].tracking_id];
+		  std::string text = "ID: "+std::to_string(output_bbox->boxes[i].tracking_id);
+		  cv::rectangle(frm, cv::Point(lround(output_bbox->boxes[i].bbox.x), lround(output_bbox->boxes[i].bbox.y)),
+			  cv::Point(lround(output_bbox->boxes[i].bbox.x + output_bbox->boxes[i].bbox.width), lround(output_bbox->boxes[i].bbox.y + output_bbox->boxes[i].bbox.height)),
+			  color, 2);
+		  cv::putText(frm, text, cv::Point(lround(output_bbox->boxes[i].bbox.x), lround(output_bbox->boxes[i].bbox.y) - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 2);
+	  }
+		  
 
-  // left side hand and feet
-  DrawKeyPointLine(frm, keypoints, left_wrist, left_pinky_knuckle, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_wrist, left_middle_tip, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_wrist, left_index_knuckle, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_wrist, left_thumb_tip, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_ankle, left_heel, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_ankle, left_big_toe, kColorBlue);
-  DrawKeyPointLine(frm, keypoints, left_big_toe, left_small_toe, kColorBlue);
+	  // center body
+	  DrawKeyPointLine(frm, keypoints, pelvis, torso, kColorGreen);
+	  DrawKeyPointLine(frm, keypoints, torso, neck, kColorGreen);
+	  DrawKeyPointLine(frm, keypoints, neck, pelvis, kColorGreen);
 
-  // head
-  DrawKeyPointLine(frm, keypoints, neck, nose, kColorGreen);
-  DrawKeyPointLine(frm, keypoints, nose, right_eye, kColorGreen);
-  DrawKeyPointLine(frm, keypoints, right_eye, right_ear, kColorGreen);
-  DrawKeyPointLine(frm, keypoints, nose, left_eye, kColorGreen);
-  DrawKeyPointLine(frm, keypoints, left_eye, left_ear, kColorGreen);
+	  // right side
+	  DrawKeyPointLine(frm, keypoints, right_ankle, right_knee, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_knee, right_hip, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_hip, pelvis, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_hip, right_shoulder, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_shoulder, right_elbow, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_elbow, right_wrist, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_shoulder, neck, kColorRed);
+
+	  // right side hand and feet
+	  DrawKeyPointLine(frm, keypoints, right_wrist, right_pinky_knuckle, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_wrist, right_middle_tip, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_wrist, right_index_knuckle, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_wrist, right_thumb_tip, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_ankle, right_heel, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_ankle, right_big_toe, kColorRed);
+	  DrawKeyPointLine(frm, keypoints, right_big_toe, right_small_toe, kColorRed);
+
+	  //left side
+	  DrawKeyPointLine(frm, keypoints, left_ankle, left_knee, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_knee, left_hip, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_hip, pelvis, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_hip, left_shoulder, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_shoulder, left_elbow, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_elbow, left_wrist, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_shoulder, neck, kColorBlue);
+
+	  // left side hand and feet
+	  DrawKeyPointLine(frm, keypoints, left_wrist, left_pinky_knuckle, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_wrist, left_middle_tip, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_wrist, left_index_knuckle, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_wrist, left_thumb_tip, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_ankle, left_heel, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_ankle, left_big_toe, kColorBlue);
+	  DrawKeyPointLine(frm, keypoints, left_big_toe, left_small_toe, kColorBlue);
+
+	  // head
+	  DrawKeyPointLine(frm, keypoints, neck, nose, kColorGreen);
+	  DrawKeyPointLine(frm, keypoints, nose, right_eye, kColorGreen);
+	  DrawKeyPointLine(frm, keypoints, right_eye, right_ear, kColorGreen);
+	  DrawKeyPointLine(frm, keypoints, nose, left_eye, kColorGreen);
+	  DrawKeyPointLine(frm, keypoints, left_eye, left_ear, kColorGreen);
+  }
 
   if (FLAG_offlineMode) keyPointsOutputVideo.write(frm);
+}
+#endif
+void DoApp::DrawKeyPointsAndEdges(const cv::Mat& src, NvAR_Point2f* keypoints, int numKeyPoints, NvAR_BBoxes* output_bbox) {
+	cv::Mat frm;
+	if (FLAG_offlineMode)
+		frm = src.clone();
+	else
+		frm = src;
+	NvAR_Point2f *pt, *endPt;
+	NvAR_Point2f* keypointsBatch8 = keypoints;
+
+	int pelvis = 0;
+	int left_hip = 1;
+	int right_hip = 2;
+	int torso = 3;
+	int left_knee = 4;
+	int right_knee = 5;
+	int neck = 6;
+	int left_ankle = 7;
+	int right_ankle = 8;
+	int left_big_toe = 9;
+	int right_big_toe = 10;
+	int left_small_toe = 11;
+	int right_small_toe = 12;
+	int left_heel = 13;
+	int right_heel = 14;
+	int nose = 15;
+	int left_eye = 16;
+	int right_eye = 17;
+	int left_ear = 18;
+	int right_ear = 19;
+	int left_shoulder = 20;
+	int right_shoulder = 21;
+	int left_elbow = 22;
+	int right_elbow = 23;
+	int left_wrist = 24;
+	int right_wrist = 25;
+	int left_pinky_knuckle = 26;
+	int right_pinky_knuckle = 27;
+	int left_middle_tip = 28;
+	int right_middle_tip = 29;
+	int left_index_knuckle = 30;
+	int right_index_knuckle = 31;
+	int left_thumb_tip = 32;
+	int right_thumb_tip = 33;
+
+	for (int i = 0; i < body_ar_engine.output_bboxes.num_boxes; i++) {
+
+		keypoints = keypointsBatch8 + (i * 34);
+
+		for (endPt = (pt = (NvAR_Point2f*)keypoints) + numKeyPoints; pt < endPt; ++pt)
+			cv::circle(frm, cv::Point(lround(pt->x), lround(pt->y)), 4, cv::Scalar(180, 180, 180), -1);
+
+		if (output_bbox) {
+			cv::rectangle(frm, cv::Point(lround(output_bbox->boxes[i].x), lround(output_bbox->boxes[i].y)),
+				cv::Point(lround(output_bbox->boxes[i].x + output_bbox->boxes[i].width), lround(output_bbox->boxes[i].y + output_bbox->boxes[i].height)),
+				cv::Scalar(255, 0, 0), 2);
+		}
+
+
+		// center body
+		DrawKeyPointLine(frm, keypoints, pelvis, torso, kColorGreen);
+		DrawKeyPointLine(frm, keypoints, torso, neck, kColorGreen);
+		DrawKeyPointLine(frm, keypoints, neck, pelvis, kColorGreen);
+
+		// right side
+		DrawKeyPointLine(frm, keypoints, right_ankle, right_knee, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_knee, right_hip, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_hip, pelvis, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_hip, right_shoulder, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_shoulder, right_elbow, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_elbow, right_wrist, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_shoulder, neck, kColorRed);
+
+		// right side hand and feet
+		DrawKeyPointLine(frm, keypoints, right_wrist, right_pinky_knuckle, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_wrist, right_middle_tip, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_wrist, right_index_knuckle, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_wrist, right_thumb_tip, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_ankle, right_heel, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_ankle, right_big_toe, kColorRed);
+		DrawKeyPointLine(frm, keypoints, right_big_toe, right_small_toe, kColorRed);
+
+		//left side
+		DrawKeyPointLine(frm, keypoints, left_ankle, left_knee, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_knee, left_hip, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_hip, pelvis, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_hip, left_shoulder, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_shoulder, left_elbow, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_elbow, left_wrist, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_shoulder, neck, kColorBlue);
+
+		// left side hand and feet
+		DrawKeyPointLine(frm, keypoints, left_wrist, left_pinky_knuckle, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_wrist, left_middle_tip, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_wrist, left_index_knuckle, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_wrist, left_thumb_tip, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_ankle, left_heel, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_ankle, left_big_toe, kColorBlue);
+		DrawKeyPointLine(frm, keypoints, left_big_toe, left_small_toe, kColorBlue);
+
+		// head
+		DrawKeyPointLine(frm, keypoints, neck, nose, kColorGreen);
+		DrawKeyPointLine(frm, keypoints, nose, right_eye, kColorGreen);
+		DrawKeyPointLine(frm, keypoints, right_eye, right_ear, kColorGreen);
+		DrawKeyPointLine(frm, keypoints, nose, left_eye, kColorGreen);
+		DrawKeyPointLine(frm, keypoints, left_eye, left_ear, kColorGreen);
+
+	}
+
+	if (FLAG_offlineMode) keyPointsOutputVideo.write(frm);
 }
 
 DoApp::Err DoApp::acquireFrame() {
@@ -682,8 +1015,20 @@ DoApp::Err DoApp::acquireBodyBox() {
     printf("]\n");
   }
   if (FLAG_captureOutputs) {
-    writeFrameAndEstResults(frame, body_ar_engine.output_bboxes);
-    writeVideoAndEstResults(frame, body_ar_engine.output_bboxes);
+#if NV_MULTI_OBJECT_TRACKER
+	  if (FLAG_enablePeopleTracking) {
+		  writeFrameAndEstResults(frame, body_ar_engine.output_tracking_bboxes);
+		  writeVideoAndEstResults(frame, body_ar_engine.output_tracking_bboxes);
+	  }
+	  else {
+		  writeFrameAndEstResults(frame, body_ar_engine.output_bboxes);
+		  writeVideoAndEstResults(frame, body_ar_engine.output_bboxes);
+	  }
+#else
+      writeFrameAndEstResults(frame, body_ar_engine.output_bboxes);
+      writeVideoAndEstResults(frame, body_ar_engine.output_bboxes);
+#endif
+    
   }
   if (0 == n) return errNoBody;
 
@@ -701,18 +1046,29 @@ DoApp::Err DoApp::acquireBodyBox() {
 DoApp::Err DoApp::acquireBodyBoxAndKeyPoints() {
   Err err = errNone;
   int numKeyPoints = body_ar_engine.getNumKeyPoints();
-  NvAR_Rect output_bbox;
-  std::vector<NvAR_Point2f> keypoints2D(numKeyPoints);
-  std::vector<NvAR_Point3f> keypoints3D(numKeyPoints);
-  std::vector<NvAR_Quaternion> jointAngles(numKeyPoints);
+  NvAR_BBoxes output_bbox;
+  NvAR_TrackingBBoxes output_tracking_bbox;
+  std::vector<NvAR_Point2f> keypoints2D(numKeyPoints * 8);
+  std::vector<NvAR_Point3f> keypoints3D(numKeyPoints * 8);
+  std::vector<NvAR_Quaternion> jointAngles(numKeyPoints * 8);
+
 
 #ifdef DEBUG_PERF_RUNTIME
   auto start = std::chrono::high_resolution_clock::now();
 #endif
 
+  unsigned n;
   // get keypoints in original image resolution coordinate space
-  unsigned n = body_ar_engine.acquireBodyBoxAndKeyPoints(frame, keypoints2D.data(), keypoints3D.data(),
-                                                         jointAngles.data(), output_bbox, 0);
+#if NV_MULTI_OBJECT_TRACKER
+  if (FLAG_enablePeopleTracking) 
+	  n = body_ar_engine.acquireBodyBoxAndKeyPoints(frame, keypoints2D.data(), keypoints3D.data(),
+		  jointAngles.data(), &output_tracking_bbox, 0);
+  
+  else 
+#endif
+	  n = body_ar_engine.acquireBodyBoxAndKeyPoints(frame, keypoints2D.data(), keypoints3D.data(),
+		  jointAngles.data(), &output_bbox, 0);
+  
 
 #ifdef DEBUG_PERF_RUNTIME
   auto end = std::chrono::high_resolution_clock::now();
@@ -734,17 +1090,37 @@ DoApp::Err DoApp::acquireBodyBoxAndKeyPoints() {
     printf("]\n");
   }
   if (FLAG_captureOutputs) {
-    writeFrameAndEstResults(frame, body_ar_engine.output_bboxes, keypoints2D.data());
-    writeVideoAndEstResults(frame, body_ar_engine.output_bboxes, keypoints2D.data());
+#if NV_MULTI_OBJECT_TRACKER
+	  if (FLAG_enablePeopleTracking) {
+		  writeFrameAndEstResults(frame, body_ar_engine.output_tracking_bboxes, keypoints2D.data());
+		  writeVideoAndEstResults(frame, body_ar_engine.output_tracking_bboxes, keypoints2D.data());
+	  }
+	  else {
+		  writeFrameAndEstResults(frame, body_ar_engine.output_bboxes, keypoints2D.data());
+		  writeVideoAndEstResults(frame, body_ar_engine.output_bboxes, keypoints2D.data());
+	  }
+#else
+      writeFrameAndEstResults(frame, body_ar_engine.output_bboxes, keypoints2D.data());
+      writeVideoAndEstResults(frame, body_ar_engine.output_bboxes, keypoints2D.data());
+#endif
+    
   }
   if (0 == n) return errNoBody;
 
 #ifdef VISUALIZE
 
   if (drawVisualization) {
-    DrawKeyPointsAndEdges(frame, keypoints2D.data(), numKeyPoints, &output_bbox);
+#if NV_MULTI_OBJECT_TRACKER
+	  if (FLAG_enablePeopleTracking) DrawKeyPointsAndEdges(frame, keypoints2D.data(), numKeyPoints, &output_tracking_bbox);
+	  else 
+#endif
+          DrawKeyPointsAndEdges(frame, keypoints2D.data(), numKeyPoints, &output_bbox);
     if (FLAG_offlineMode) {
-      DrawBBoxes(frame, &output_bbox);
+#if NV_MULTI_OBJECT_TRACKER
+		if (FLAG_enablePeopleTracking) DrawBBoxes(frame, &output_tracking_bbox);
+		else 
+#endif
+            DrawBBoxes(frame, &output_bbox);
     }
   }
 #endif  // VISUALIZE
@@ -920,6 +1296,8 @@ DoApp::Err DoApp::run() {
       }
       cv::imshow(windowTitle, frame);
     }
+	
+
 
     if (!FLAG_offlineMode) {
       int n = cv::waitKey(1);
@@ -991,7 +1369,9 @@ int main(int argc, char **argv) {
 
   if (FLAG_useCudaGraph) printf("Enable capturing cuda graph = %d\n", FLAG_useCudaGraph);
   app.body_ar_engine.useCudaGraph(FLAG_useCudaGraph);
-
+#if NV_MULTI_OBJECT_TRACKER
+  app.body_ar_engine.enablePeopleTracking(FLAG_enablePeopleTracking, FLAG_shadowTrackingAge, FLAG_probationAge, FLAG_maxTargetsTracked);
+#endif
   doErr = DoApp::errBodyModelInit;
   if (FLAG_modelPath.empty()) {
     printf("WARNING: Model path not specified. Please set --model_path=/path/to/trt/and/body/models, "

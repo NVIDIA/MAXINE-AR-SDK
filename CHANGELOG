@@ -1,6 +1,16 @@
-Changelog (v0.7.6.2)
- - 3D Body Pose Keypoint Tracking
-    - Quality improvement in accuracy and stability
-    - Property NvAR_Parameter_Config(NVAR_MODE) is now NvAR_Parameter_Config(Mode)
- - Migrated to TensorRT 8.0.1.6
- - Migrated to CUDA 11.3u1
+Changelog (v0.8.1.0)
+--------------------
+ - NEW! Eye Contact feature: an AI algorithm to help users keep their gaze engaged in video communication. The feature jointly estimates a user’s gaze direction and redirects it to frontal in video sequences.
+ - NEW! Face Expression Estimation (Beta) feature estimates facial expression coefficients From the video or the provided facial landmarks. ExpressionApp is added to demonstrate the new Face Expressions feature.
+ - NEW! Default face model for the Face 3D mesh and tracking feature, face_model2.nvf, now ships with the SDK. The old SFM based face_model0.nvf is no longer required.
+ - 3D Body Pose Estimation:
+    - NEW! Added the support for Multi Person Tracking. This feature is supported by the Windows SDK only.
+    - FocalLength is now a NvAR_Parameter_Input. Users can now change FocalLength at every NvAR_Run() without having to call NvAR_Load().
+    - The reference pose returned by the feature has been updated
+ - Facial landmark estimation
+    - NEW! There are now 2 modalities for facial landmark tracking: {0,1} -> {performance, quality}. Make sure to choose the preferred mode for your application. The default for face mesh fitting and expression estimation are 1, and the others are 0.
+    - Head Pose output from the NvAR_Feature_LandmarkDetection feature is now in the OpenGL convention. Changed from X-back(towards the camera), Y-right, Z-down to X-right, Y-up, Z-back(towards the camera).
+    - The sample apps now show the headpose in the OpenGL convention. The color coding of the axes is  Red - X , Green - Y, Blue - Z
+ - NvCVImage_Transfer() now sets alpha to 255 or 1.0f when doing RGB -> RGBA. NvCVImage_CompositeRect() has a premultiplied alpha mode added
+ - Migrated to TensorRT 8.4.2.2
+ - Migrated to CUDA 11.6u1

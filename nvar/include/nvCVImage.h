@@ -323,6 +323,12 @@ NvCV_Status NvCV_API NvCVImage_Realloc(NvCVImage *im, unsigned width, unsigned h
 void NvCV_API NvCVImage_Dealloc(NvCVImage *im);
 
 
+//! Deallocate the image buffer from the image asynchronously on the specified stream. The image is not deallocated.
+//! param[in,out] im      the image whose buffer is to be deallocated.
+//! param[int]    stream  the CUDA stream on which the image buffer is to be deallocated..
+void NvCV_API NvCVImage_DeallocAsync(NvCVImage *im, struct CUstream_st *stream);
+
+
 //! Allocate a new image, with storage (C-style constructor).
 //! \param[in]      width     the desired width  of the image, in pixels.
 //! \param[in]      height    the desired height of the image, in pixels.
@@ -378,7 +384,7 @@ void NvCV_API NvCVImage_ComponentOffsets(NvCVImage_PixelFormat format, int *rOff
 //!    | RGB    --> RGB    |      X      |      X      |      X      |      X      |
 //!    | RGB    --> RGBA   |      X      |      X      |      X      |      X      |
 //!    | RGBA   --> Y      |      X      |      X      |             |             |
-//!    | RGBA   --> A      |             |      X      |             |             |
+//!    | RGBA   --> A      |      X      |             |             |             |
 //!    | RGBA   --> RGB    |      X      |      X      |      X      |      X      |
 //!    | RGBA   --> RGBA   |      X      |      X      |      X      |      X      |
 //!    | RGB    --> YUV420 |      X      |             |      X      |             |
@@ -559,7 +565,7 @@ NvCV_Status NvCV_API NvCVImage_Composite(const NvCVImage *fg, const NvCVImage *b
 //! \param[in]      mat     the matte image, indicating where the src should come through.
 //!                         This determines the size of the rectangle to be composited.
 //!                         If this is multi-channel, the alpha channel is used as the matte.
-//! \param[in]      mode    the composition mode. Only 0 (straight alpha over) is implemented at this time.
+//! \param[in]      mode    the composition mode: 0 (straight alpha over) or 1 (premultiplied alpha over).
 //! \param[out]     dst     the destination image. This can be the same as fg or bg.
 //! \param[in]      dstOrg  the upper-left corner of the dst image to be updated (NULL implies (0,0)).
 //! \param[in]      stream  the CUDA stream on which the composition is to be performed.
@@ -629,6 +635,23 @@ NvCV_Status NvCV_API NvCVImage_FlipY(const NvCVImage *src, NvCVImage *dst);
 NvCV_Status NvCV_API NvCVImage_GetYUVPointers(NvCVImage *im,
   unsigned char **y, unsigned char **u, unsigned char **v,
   int *yPixBytes, int *cPixBytes, int *yRowBytes, int *cRowBytes);
+
+
+//! Sharpen an image.
+//! The src and dst should be the same type - conversions are not performed.
+//! This function is only implemented for NVCV_CHUNKY NVCV_U8 pixels, of format NVCV_RGB or NVCV_BGR.
+//! \param[in]  sharpness the sharpness strength, calibrated so that 1 and 2 yields Adobe's Sharpen and Sharpen More.
+//! \param[in]  src       the source image to be sharpened.
+//! \param[out] dst       the resultant image (may be the same as the src).
+//! \param[in]  stream    the CUDA stream on which to perform the computations.
+//! \param[in]  tmp       a temporary working image. This can be NULL, but may result in lower performance.
+//!                       It is best if it resides on the same processor (CPU or GPU) as the destination.
+//! @return     NVCV_SUCCESS          if the operation completed successfully.
+//!             NVCV_ERR_MISMATCH     if the source and destination formats are different.
+//!             NVCV_ERR_PIXELFORMAT  if the function has not been implemented for the chosen pixel type.
+
+NvCV_Status NvCV_API NvCVImage_Sharpen(float sharpness, const NvCVImage *src, NvCVImage *dst,
+  struct CUstream_st *stream, NvCVImage *tmp);
 
 
 #ifdef __cplusplus

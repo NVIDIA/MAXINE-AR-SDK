@@ -38,6 +38,13 @@
 #include "nvAR_defs.h"
 #include "opencv2/opencv.hpp"
 
+#if CV_MAJOR_VERSION >= 4
+#define CV_CAP_PROP_FRAME_WIDTH cv::CAP_PROP_FRAME_WIDTH
+#define CV_CAP_PROP_FRAME_HEIGHT cv::CAP_PROP_FRAME_HEIGHT
+#define CV_CAP_PROP_FPS cv::CAP_PROP_FPS
+#define CV_CAP_PROP_FRAME_COUNT cv::CAP_PROP_FRAME_COUNT
+#endif
+
 #ifndef M_PI
 #define M_PI 3.1415926535897932385
 #endif /* M_PI */
@@ -66,7 +73,7 @@
  ********************************************************************************/
 
 bool FLAG_debug = false, FLAG_verbose = false, FLAG_temporal = true, FLAG_captureOutputs = false,
-     FLAG_offlineMode = false, FLAG_isNumLandmarks126 = false;
+FLAG_offlineMode = false, FLAG_isNumLandmarks126 = false; unsigned int FLAG_landmarkMode = 0;
 std::string FLAG_outDir, FLAG_inFile, FLAG_outFile, FLAG_modelPath, FLAG_landmarks, FLAG_proxyWireframe,
     FLAG_captureCodec = "avc1", FLAG_camRes, FLAG_faceModel;
 unsigned int FLAG_appMode = 2;
@@ -93,7 +100,8 @@ static void Usage() {
       " --face_model=<file>               specify the  name of the face model\n"
       " --wireframe_mesh=<path>           specify the path to a proxy wireframe mesh\n"
       " --app_mode[=(0|1|2)]              App mode. 0: Face detection, 1: Landmark detection, 2: Face fitting "
-      "(Default)."
+      "(Default).\n"
+      " --landmark_mode                   Select Landmark Detection Model. 0: Performance (Default),  1: Quality\n"            
       " --benchmarks[=<pattern>]          run benchmarks\n");
 }
 
@@ -197,7 +205,8 @@ static int ParseMyArgs(int argc, char **argv) {
                 GetFlagArgVal("landmarks", arg, &FLAG_landmarks) || GetFlagArgVal("model_path", arg, &FLAG_modelPath) ||
                 GetFlagArgVal("wireframe_mesh", arg, &FLAG_proxyWireframe) ||
                 GetFlagArgVal("face_model", arg, &FLAG_faceModel) ||
-                GetFlagArgVal("app_mode", arg, &FLAG_appMode) || GetFlagArgVal("temporal", arg, &FLAG_temporal))) {
+                GetFlagArgVal("app_mode", arg, &FLAG_appMode) || GetFlagArgVal("temporal", arg, &FLAG_temporal) || 
+                GetFlagArgVal("landmark_mode", arg, &FLAG_landmarkMode))) {
       continue;
     } else if (GetFlagArgVal("help", arg, &help)) {
       Usage();
@@ -227,10 +236,11 @@ enum {
 #if 1
 class MyTimer {
  public:
-  void start() { t0 = std::chrono::high_resolution_clock::now(); }       /**< Start  the timer. */
-  void pause() { dt = std::chrono::high_resolution_clock::now() - t0; }  /**< Pause  the timer. */
-  void resume() { t0 = std::chrono::high_resolution_clock::now() - dt; } /**< Resume the timer. */
-  void stop() { pause(); }                                               /**< Stop   the timer. */
+  MyTimer()     { dt = dt.zero();                                      }  /**< Clear the duration to 0. */
+  void start()  { t0 = std::chrono::high_resolution_clock::now();      }  /**< Start  the timer. */
+  void pause()  { dt = std::chrono::high_resolution_clock::now() - t0; }  /**< Pause  the timer. */
+  void resume() { t0 = std::chrono::high_resolution_clock::now() - dt; }  /**< Resume the timer. */
+  void stop()   { pause();                                             }  /**< Stop   the timer. */
   double elapsedTimeFloat() const {
     return std::chrono::duration<double>(dt).count();
   } /**< Report the elapsed time as a float. */
@@ -297,7 +307,7 @@ class DoApp {
   ~DoApp();
 
   void stop();
-  Err initFaceEngine(const char *modelPath = nullptr, bool isLandmarks126 = false);
+  Err initFaceEngine(const char *modelPath = nullptr, bool isLandmarks126 = false, int mode = 0);
   Err initCamera(const char *camRes = nullptr);
   Err initOfflineMode(const char *inputFilename = nullptr, const char *outputFilename = nullptr);
   Err acquireFrame();
@@ -327,6 +337,7 @@ class DoApp {
   int frameIndex;
   static const char windowTitle[];
   double frameTime;
+  const int batchSize = 1;
   // std::chrono::high_resolution_clock::time_point frameTimer;
   MyTimer frameTimer;
   cv::VideoWriter capturedVideo;
@@ -390,20 +401,21 @@ void DoApp::processKey(int key) {
   }
 }
 
-DoApp::Err DoApp::initFaceEngine(const char *modelPath, bool isNumLandmarks126) {
+
+DoApp::Err DoApp::initFaceEngine(const char *modelPath, bool isNumLandmarks126, int mode) {
   if (!cap.isOpened()) return errVideo;
 
   int numLandmarkPoints = isNumLandmarks126 ? 126 : 68;
   face_ar_engine.setNumLandmarks(numLandmarkPoints);
 
-  nvErr = face_ar_engine.createFeatures(modelPath);
+  nvErr = face_ar_engine.createFeatures(modelPath, batchSize, mode);
   if (nvErr != FaceEngine::Err::errNone) {
     if (nvErr == FaceEngine::Err::errInitialization && face_ar_engine.appMode == FaceEngine::mode::faceMeshGeneration) {
       showFaceFitErrorMessage();
       printf("WARNING: face fitting has failed, trying to initialize Landmark Detection\n");
       face_ar_engine.destroyFeatures();
       face_ar_engine.setAppMode(FaceEngine::mode::landmarkDetection);
-      nvErr = face_ar_engine.createFeatures(modelPath);
+      nvErr = face_ar_engine.createFeatures(modelPath, batchSize, mode);
     }
   }
 
@@ -437,7 +449,7 @@ void DoApp::stop() {
 
 void DoApp::showFaceFitErrorMessage() {
   cv::Mat errBox = cv::Mat::zeros(120, 640, CV_8UC3);
-  cv::putText(errBox, cv::String("Warning: Face Fitting needs face_model0.nvf in the path --model_path"), cv::Point(20, 20),
+  cv::putText(errBox, cv::String("Warning: Face Fitting needs face_model2.nvf in the path --model_path"), cv::Point(20, 20),
               cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
   cv::putText(errBox, cv::String("or in NVAR_MODEL_DIR environment variable."), cv::Point(20, 40), cv::FONT_HERSHEY_SIMPLEX,
               0.5, cv::Scalar(255, 255, 255), 1);
@@ -607,8 +619,8 @@ void DoApp::DrawFaceMesh(const cv::Mat &src, NvAR_FaceMesh *face_mesh) {
     NvAR_FaceMesh wfMesh{nullptr, 0, nullptr, 0};
     wfMesh.num_vertices = face_mesh->num_vertices;
     wfMesh.vertices = face_mesh->vertices;
-    wfMesh.num_tri_idx = proxyWireframe.size();
-    wfMesh_tvi_data.resize(wfMesh.num_tri_idx);
+    wfMesh.num_triangles = proxyWireframe.size();
+    wfMesh_tvi_data.resize(wfMesh.num_triangles);
     wfMesh.tvi = wfMesh_tvi_data.data();
 
     for (int i = 0; i < proxyWireframe.size(); i++) {
@@ -1088,7 +1100,12 @@ int main(int argc, char **argv) {
   }
   BAIL_IF_ERR(doErr);
 
-  doErr = app.initFaceEngine(FLAG_modelPath.c_str(), FLAG_isNumLandmarks126);
+  if ((FLAG_landmarkMode < 0) | (FLAG_landmarkMode > 1)){
+    doErr = DoApp::errParameter;
+    printf("ERROR: %s, Please Select Either Mode 0 or 1! \n", app.errorStringFromCode(doErr));
+  }
+
+  doErr = app.initFaceEngine(FLAG_modelPath.c_str(), FLAG_isNumLandmarks126, FLAG_landmarkMode);
   BAIL_IF_ERR(doErr);
 
   if (!FLAG_proxyWireframe.empty()) app.setProxyWireframe(FLAG_proxyWireframe.c_str());

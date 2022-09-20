@@ -77,7 +77,11 @@ typedef enum NvCV_Status {
   NVCV_ERR_TRT_ENGINE            = -30,  ///< There was a problem deserializing the inference runtime engine.
   NVCV_ERR_NPP                   = -31,  //!< An error has occurred in the NPP library.
   NVCV_ERR_CONFIG                = -32,  //!< No suitable model exists for the specified parameter configuration.
+  NVCV_ERR_TOOSMALL              = -33,  //!< A supplied parameter or buffer is not large enough.
+  NVCV_ERR_TOOBIG                = -34,  //!< A supplied parameter is too big.
+  NVCV_ERR_WRONGSIZE             = -35,  //!< A supplied parameter is not the expected size.
 
+  NVCV_ERR_OPENGL                = -98,  //!< An OpenGL error has occurred.
   NVCV_ERR_DIRECT3D              = -99,  //!< A Direct3D error has occurred.
 
   NVCV_ERR_CUDA_BASE             = -100,  //!< CUDA errors are offset from this value.

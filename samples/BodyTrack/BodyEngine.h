@@ -141,17 +141,28 @@ class BodyEngine {
   NvAR_Point2f* getKeyPoints();
   NvAR_Point3f* getKeyPoints3D();
   NvAR_Quaternion* getJointAngles();
+  NvAR_BBoxes* getBBoxes();
+#if NV_MULTI_OBJECT_TRACKER
+  NvAR_TrackingBBoxes* getTrackingBBoxes();
+#endif
   float* getKeyPointsConfidence();
   float getAverageKeyPointsConfidence();
   void enlargeAndSquarifyImageBox(float enlarge, NvAR_Rect& box, int FLAG_variant);
   unsigned findLargestBodyBox(NvAR_Rect& bodyBox, int variant = 0);
   unsigned acquireBodyBox(cv::Mat& src, NvAR_Rect& bodyBox, int variant = 0); 
   unsigned acquireBodyBoxAndKeyPoints(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Point3f* refKeyPoints3D,
-      NvAR_Quaternion* refJointAngles, NvAR_Rect& bodyBox, int variant = 0);
+      NvAR_Quaternion* refJointAngles, NvAR_BBoxes* refBodyBoxes, int variant = 0);
+#if NV_MULTI_OBJECT_TRACKER
+  unsigned acquireBodyBoxAndKeyPoints(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Point3f* refKeyPoints3D,
+	  NvAR_Quaternion* refJointAngles, NvAR_TrackingBBoxes* refBodyBoxes, int variant = 0);
+#endif
   void setBodyStabilization(bool);
   void setMode(int);
-  void setFocalLength(float);
+  BodyEngine::Err setFocalLength(float);
   void useCudaGraph(bool); // Using cuda graph improves model latency
+#if NV_MULTI_OBJECT_TRACKER
+  void enablePeopleTracking(bool _bEnablePeopleTracking, unsigned int _shadowTrackingAge = 90, unsigned int _probationAge = 10, unsigned int _maxTargetsTracked = 30);
+#endif
   int getNumKeyPoints() { return numKeyPoints; }
   std::vector<NvAR_Point3f> getReferencePose() { return referencePose; }
 
@@ -165,6 +176,11 @@ class BodyEngine {
   std::vector<NvAR_Rect> output_bbox_data;
   std::vector<float> output_bbox_conf_data;
   NvAR_BBoxes output_bboxes{};
+#if NV_MULTI_OBJECT_TRACKER
+  NvAR_TrackingBBoxes output_tracking_bboxes{};
+  std::vector<NvAR_TrackingBBox> output_tracking_bbox_data;
+#endif
+  
   int batchSize;
   int nvARMode;
   std::mt19937 ran;
@@ -178,12 +194,23 @@ class BodyEngine {
   char *bdOTAModelPath, *ldOTAModelPath;
   float bFocalLength;
   bool bUseCudaGraph;
-
+#if NV_MULTI_OBJECT_TRACKER
+  bool bEnablePeopleTracking;
+  unsigned int shadowTrackingAge;
+  unsigned int probationAge;
+  unsigned int maxTargetsTracked;
+#endif
   BodyEngine() {
     batchSize = 1;
     nvARMode = 1;
     bStabilizeBody = true;
     bUseCudaGraph = true;
+#if NV_MULTI_OBJECT_TRACKER
+	bEnablePeopleTracking = false;
+	shadowTrackingAge = 90;
+    probationAge = 10;
+	maxTargetsTracked = 30;
+#endif
     bFocalLength = FOCAL_LENGTH_DEFAULT;
     confidenceThreshold = 0.f;
     appMode = keyPointDetection;

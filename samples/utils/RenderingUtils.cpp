@@ -39,7 +39,7 @@ void draw_wireframe(const cv::Mat& image, const NvAR_FaceMesh& mesh, const NvAR_
   glm::mat4x4 modelview  = get_modelview(rp);
   glm::mat4x4 projection = get_projection(rp);
   glm::vec4 viewport = get_opencv_viewport(image.cols, image.rows);
-  for (int i = 0; i < mesh.num_tri_idx; i++) 
+  for (int i = 0; i < mesh.num_triangles; i++) 
   {
     const auto& triangle = mesh.tvi[i];
     const auto p1 =

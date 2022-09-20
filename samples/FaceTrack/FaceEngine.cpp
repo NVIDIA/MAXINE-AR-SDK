@@ -71,7 +71,7 @@ int FaceEngine::getNumExpressionCoefficients() {
 }
 
 
-FaceEngine::Err FaceEngine::createFeatures(const char* modelPath, unsigned int _batchSize) {
+FaceEngine::Err FaceEngine::createFeatures(const char* modelPath, unsigned int _batchSize, unsigned int mode) {
   FaceEngine::Err err = FaceEngine::Err::errNone;
 
   NvCV_Status cuErr = NvAR_CudaStreamCreate(&stream);
@@ -85,7 +85,7 @@ FaceEngine::Err FaceEngine::createFeatures(const char* modelPath, unsigned int _
       printf("ERROR: An error has occurred while initializing Face Detection\n");
     }
   } else if (appMode == landmarkDetection) {
-    err = createLandmarkDetectionFeature(modelPath, _batchSize, stream);
+    err = createLandmarkDetectionFeature(modelPath, _batchSize, stream, mode);
     if (err != Err::errNone) {
       printf("ERROR: An error has occurred while initializing Landmark Detection\n");
     }
@@ -117,7 +117,7 @@ FaceEngine::Err FaceEngine::createFaceDetectionFeature(const char* modelPath, CU
   nvErr = NvAR_SetCudaStream(faceDetectHandle, NvAR_Parameter_Config(CUDAStream), str);
   BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
 
-  nvErr = NvAR_SetU32(faceDetectHandle, NvAR_Parameter_Config(Temporal), bStabilizeFace);
+  nvErr = NvAR_SetU32(faceDetectHandle, NvAR_Parameter_Config(Temporal), (bStabilizeFace ? -1 : 0));
   BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
 
   nvErr = NvAR_Load(faceDetectHandle);
@@ -128,7 +128,7 @@ bail:
 }
 
 FaceEngine::Err FaceEngine::createLandmarkDetectionFeature(const char* modelPath, unsigned int _batchSize,
-                                                           CUstream str) {
+                                                           CUstream str, unsigned int mode) {
   FaceEngine::Err err = FaceEngine::Err::errNone;
   NvCV_Status nvErr;
 
@@ -151,13 +151,16 @@ FaceEngine::Err FaceEngine::createLandmarkDetectionFeature(const char* modelPath
   nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(BatchSize), batchSize);
   BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
 
-  nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(Temporal), bStabilizeFace);
+  nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(Temporal), (bStabilizeFace ? -1 : 0));
   BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
 
   nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(Landmarks_Size), numLandmarks);
   BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
 
   nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(LandmarksConfidence_Size), numLandmarks);
+  BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
+
+  nvErr = NvAR_SetU32(landmarkDetectHandle, NvAR_Parameter_Config(Mode), mode);
   BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
 
   nvErr = NvAR_Load(landmarkDetectHandle);
@@ -297,8 +300,20 @@ FaceEngine::Err FaceEngine::initFaceFittingIOParams(NvCVImage* inBuf) {
   FaceEngine::Err err = FaceEngine::Err::errNone;
 
   face_mesh = new NvAR_FaceMesh();
-  face_mesh->vertices = nullptr;  //new NvAR_Vector3f[FACE_MODEL_NUM_VERTICES];
-  face_mesh->tvi = nullptr;       // new NvAR_Vector3u16[FACE_MODEL_NUM_INDICES];
+
+  unsigned int num_vertices, num_triangles;
+  nvErr = NvAR_GetU32(faceFitHandle, NvAR_Parameter_Config(VertexCount), &num_vertices);
+  BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
+
+  nvErr = NvAR_GetU32(faceFitHandle, NvAR_Parameter_Config(TriangleCount), &num_triangles);
+  BAIL_IF_NVERR(nvErr, err, FaceEngine::Err::errParameter);
+
+  face_mesh->num_vertices = num_vertices;
+  face_mesh->num_triangles = num_triangles;
+  m_vertices.assign(num_vertices, {0.f, 0.f, 0.f});
+  m_triangles.assign(num_triangles, { 0, 0, 0 });
+  face_mesh->vertices = m_vertices.data();
+  face_mesh->tvi = m_triangles.data();
   rendering_params = new NvAR_RenderingParams();
 
   nvErr = NvAR_SetObject(faceFitHandle, NvAR_Parameter_Input(Image), inBuf, sizeof(NvCVImage));
@@ -419,14 +434,6 @@ void FaceEngine::releaseFaceFittingIOParams() {
     rendering_params = nullptr;
   }
   if (face_mesh) {
-    if (face_mesh->vertices) {
-      delete[] face_mesh->vertices;
-      face_mesh->vertices = nullptr;
-    }
-    if (face_mesh->tvi) {
-      delete[] face_mesh->tvi;
-      face_mesh->tvi = nullptr;
-    }
     delete face_mesh;
     face_mesh = nullptr;
   }
@@ -557,34 +564,27 @@ static bool IntersectRectWithImage(const cv::Rect& srcRect, const cv::Mat& src, 
 }
 #endif // UNUSED
 
-void FaceEngine::DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose) {
-  float R[3][3];
-  set_rotation_from_quaternion(pose, R[0]);
-  float radius = 100.f;
-  float x1 = radius * R[1][0];
-  float y1 = radius * R[2][0];
-  float x2 = radius * R[1][1];
-  float y2 = radius * R[2][1];
-  float x3 = radius * R[1][2] * -1.f;
-  float y3 = radius * R[2][2] * -1.f;
+void FaceEngine::DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose) const {
+  const float vector_scale = 50.0f;
+  const int thickness = 2;
+  float rot_mat[3][3];
+  set_rotation_from_quaternion(pose, rot_mat[0]);
+  const auto avg_landmark_pos = GetAverageLandmarkPositionInGlSpace();
 
-  int nose_tip = 0;
-  const char* kNoseTipName = "nose-tip";
-  nose_tip = FindLandmarkIndexFromName(numLandmarks, kNoseTipName);
+  cv::Point p0 = {static_cast<int>(avg_landmark_pos[0]), static_cast<int>(avg_landmark_pos[1])};
+  cv::Point px = p0 + cv::Point(std::lround(rot_mat[0][0] * vector_scale), std::lround(rot_mat[0][1] * vector_scale));
+  cv::Point py = p0 + cv::Point(std::lround(rot_mat[1][0] * vector_scale), std::lround(rot_mat[1][1] * vector_scale));
+  cv::Point pz = p0 + cv::Point(std::lround(rot_mat[2][0] * vector_scale), std::lround(rot_mat[2][1] * vector_scale));
 
-  int width = src.cols;
-  int height = src.rows;
-  NvAR_Point2f cxy = *(facial_landmarks.data() + nose_tip);
-  float cx1 = (float)std::min(std::max(0, int(cxy.x + x1)), width - 1);
-  float cy1 = (float)std::min(std::max(0, int(cxy.y + y1)), height - 1);
-  float cx2 = (float)std::min(std::max(0, int(cxy.x + x2)), width - 1);
-  float cy2 = (float)std::min(std::max(0, int(cxy.y + y2)), height - 1);
-  float cx3 = (float)std::min(std::max(0, int(cxy.x + x3)), width - 1);
-  float cy3 = (float)std::min(std::max(0, int(cxy.y + y3)), height - 1);
+  // Convert from OpenGL to OpenCV space
+  p0.y = src.rows - 1 - p0.y;
+  px.y = src.rows - 1 - px.y;
+  py.y = src.rows - 1 - py.y;
+  pz.y = src.rows - 1 - pz.y;
 
-  cv::line(src, cv::Point((int)cxy.x, (int)cxy.y), cv::Point((int)cx1, (int)cy1), cv::Scalar(0, 0, 255), 2);
-  cv::line(src, cv::Point((int)cxy.x, (int)cxy.y), cv::Point((int)cx2, (int)cy2), cv::Scalar(0, 255, 0), 2);
-  cv::line(src, cv::Point((int)cxy.x, (int)cxy.y), cv::Point((int)cx3, (int)cy3), cv::Scalar(255, 0, 0), 2);
+  cv::line(src, p0, px, CV_RGB(255, 0, 0), thickness);
+  cv::line(src, p0, py, CV_RGB(0, 255, 0), thickness);
+  cv::line(src, p0, pz, CV_RGB(0, 0, 255), thickness);
 }
 
 NvCV_Status FaceEngine::findLandmarks() {
@@ -617,6 +617,18 @@ NvCV_Status FaceEngine::findLandmarks() {
 NvAR_Point2f* FaceEngine::getLandmarks() { return facial_landmarks.data(); }
 
 float* FaceEngine::getLandmarksConfidence() { return facial_landmarks_confidence.data(); }
+
+std::array<float, 2> FaceEngine::GetAverageLandmarkPositionInGlSpace() const {
+  std::array<float, 2> res = { 0.0f, 0.0f };
+  for (const auto& landmark : facial_landmarks) {
+    res[0] += landmark.x;
+    res[1] += landmark.y;
+  }
+  res[0] /= facial_landmarks.size();
+  res[1] /= facial_landmarks.size();
+  res[1] = input_image_height - res[1]; //Convert y coordinate from CV to GL space
+  return res;
+}
 
 float FaceEngine::getAverageLandmarksConfidence() {
   float average_confidence = 0.0f;
@@ -686,13 +698,18 @@ void FaceEngine::setFaceStabilization(bool _bStabilizeFace) { bStabilizeFace = _
 
 FaceEngine::Err FaceEngine::setNumLandmarks(int n) {
   FaceEngine::Err err = errNone;
-  for (auto const& info : LANDMARKS_INFO) {
+#ifdef _WIN32 // Keep Updated Thresholds for Windows Only
+  for (auto const& info : LANDMARKS_INFO) 
+#else
+  for (auto const& info : LANDMARKS_INFO_UNIX)
+#endif
+  {
     if (n == info.numPoints) {
       numLandmarks = info.numPoints;
       confidenceThreshold = info.confidence_threshold;
       return err;
     }
-  }
+  }    
   err = errGeneral;
   return err;
 }
