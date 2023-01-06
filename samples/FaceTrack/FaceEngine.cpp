@@ -439,10 +439,10 @@ void FaceEngine::releaseFaceFittingIOParams() {
   }
 }
 
-unsigned FaceEngine::findFaceBoxes() {
+NvCV_Status FaceEngine::findFaceBoxes(unsigned &num_boxes) {
   NvCV_Status nvErr = NvAR_Run(faceDetectHandle);
-  if (NVCV_SUCCESS != nvErr) return 0;
-  return (unsigned)output_bboxes.num_boxes;
+  num_boxes = (unsigned)output_bboxes.num_boxes;
+  return nvErr;
 }
 
 NvAR_Rect* FaceEngine::getLargestBox() {
@@ -587,16 +587,18 @@ void FaceEngine::DrawPose(const cv::Mat& src, const NvAR_Quaternion* pose) const
   cv::line(src, p0, pz, CV_RGB(0, 0, 255), thickness);
 }
 
-NvCV_Status FaceEngine::findLandmarks() {
+FaceEngine::Err FaceEngine::findLandmarks() {
   NvCV_Status nvErr;
 
   nvErr = NvAR_Run(landmarkDetectHandle);
   if (NVCV_SUCCESS != nvErr) {
-    return nvErr;
+    return FaceEngine::Err::errRun;
   }
 
-  if (getAverageLandmarksConfidence() < confidenceThreshold) {
-    return NVCV_ERR_GENERAL;
+  float avg_confidence = getAverageLandmarksConfidence();
+
+  if (avg_confidence < confidenceThreshold) {
+    return FaceEngine::Err::errNoFaceDetected;
   } else {
     average_poses(getPose(), batchSize);
     NvAR_Point2f *pt, *endPt;
@@ -611,7 +613,7 @@ NvCV_Status FaceEngine::findLandmarks() {
       pt->y /= batchSize;
     }
   }
-  return NVCV_SUCCESS;
+  return FaceEngine::Err::errNone;
 }
 
 NvAR_Point2f* FaceEngine::getLandmarks() { return facial_landmarks.data(); }
@@ -644,12 +646,16 @@ float FaceEngine::getAverageLandmarksConfidence() {
 
 NvAR_Quaternion* FaceEngine::getPose() { return facial_pose.data(); }
 
-unsigned FaceEngine::findLargestFaceBox(NvAR_Rect& faceBox, int variant) {
-  unsigned n;
+FaceEngine::Err FaceEngine::findLargestFaceBox(NvAR_Rect& faceBox, int variant) {
   NvAR_Rect* pFaceBox;
+  unsigned num_boxes;
 
-  n = findFaceBoxes();
-  if (n >= 1) {
+  NvCV_Status nv_err = findFaceBoxes(num_boxes);
+  if (NVCV_SUCCESS != nv_err) {
+      return FaceEngine::Err::errRun;
+    }
+
+  if (num_boxes >= 1) {
     pFaceBox = getLargestBox();
     if (nullptr == pFaceBox) {
       faceBox.x = faceBox.y = faceBox.width = faceBox.height = 0.0f;
@@ -658,40 +664,41 @@ unsigned FaceEngine::findLargestFaceBox(NvAR_Rect& faceBox, int variant) {
     }
     enlargeAndSquarifyImageBox(.2f, faceBox, variant);
   }
-  return n;
+  else return FaceEngine::Err::errNoFaceDetected;
+
+  return FaceEngine::Err::errNone;
 }
 
-unsigned FaceEngine::acquireFaceBox(cv::Mat& src, NvAR_Rect& faceBox, int variant) {
-  unsigned n = 0;
+FaceEngine::Err FaceEngine::acquireFaceBox(cv::Mat& src, NvAR_Rect& faceBox, int variant) {
   NvCVImage fxSrcChunkyCPU;
   (void)NVWrapperForCVMat(&src, &fxSrcChunkyCPU);
   NvCV_Status cvErr = NvCVImage_Transfer(&fxSrcChunkyCPU, &inputImageBuffer, 1.0f, stream, &tmpImage);
 
   if (NVCV_SUCCESS != cvErr) {
-    return n;
+    return FaceEngine::Err::errRun;
   }
-
-  n = findLargestFaceBox(faceBox, variant);
-  return n;
+  FaceEngine::Err nv_err = findLargestFaceBox(faceBox, variant);
+  
+  return nv_err;
 }
 
-unsigned FaceEngine::acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int /*variant*/) {
-  unsigned n = 0;
+FaceEngine::Err FaceEngine::acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int /*variant*/) {
   NvCVImage fxSrcChunkyCPU;
   (void)NVWrapperForCVMat(&src, &fxSrcChunkyCPU);
   NvCV_Status cvErr = NvCVImage_Transfer(&fxSrcChunkyCPU, &inputImageBuffer, 1.0f, stream, &tmpImage);
 
   if (NVCV_SUCCESS != cvErr) {
-    return n;
+    return FaceEngine::Err::errRun;
   }
 
-
-  if (findLandmarks() != NVCV_SUCCESS) return 0;
-  faceBox = output_bboxes.boxes[0];
-  n = 1;
-  memcpy(refMarks, getLandmarks(), sizeof(NvAR_Point2f) * numLandmarks);
-
-  return n;
+  FaceEngine::Err nv_err = findLandmarks();
+  
+  if(nv_err == FaceEngine::Err::errNone){
+    faceBox = output_bboxes.boxes[0];
+    memcpy(refMarks, getLandmarks(), sizeof(NvAR_Point2f) * numLandmarks);
+  }
+  
+  return nv_err;
 }
 
 void FaceEngine::setFaceStabilization(bool _bStabilizeFace) { bStabilizeFace = _bStabilizeFace; }

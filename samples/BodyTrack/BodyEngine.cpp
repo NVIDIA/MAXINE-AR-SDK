@@ -222,32 +222,32 @@ BodyEngine::Err BodyEngine::initKeyPointDetectionIOParams(NvCVImage* inBuf) {
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
   nvErr = NvAR_SetF32Array(keyPointDetectHandle, NvAR_Parameter_Output(KeyPointsConfidence),
-	  keypoints_confidence.data(), sizeof(float));
+      keypoints_confidence.data(), sizeof(float));
   BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
 #if NV_MULTI_OBJECT_TRACKER
   if (bEnablePeopleTracking) {
-	  output_tracking_bbox_size = maxTargetsTracked;
-	  output_tracking_bbox_data.assign(output_tracking_bbox_size, { 0.f, 0.f, 0.f, 0.f, 0 });
-	  output_tracking_bboxes.boxes = output_tracking_bbox_data.data();
-	  output_tracking_bboxes.max_boxes = (uint8_t)output_tracking_bbox_size;
-	  output_tracking_bboxes.num_boxes = 0;
-	  nvErr =
-		  NvAR_SetObject(keyPointDetectHandle, NvAR_Parameter_Output(TrackingBoundingBoxes), &output_tracking_bboxes, sizeof(NvAR_TrackingBBoxes));
-	  BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
+      output_tracking_bbox_size = maxTargetsTracked;
+      output_tracking_bbox_data.assign(output_tracking_bbox_size, { 0.f, 0.f, 0.f, 0.f, 0 });
+      output_tracking_bboxes.boxes = output_tracking_bbox_data.data();
+      output_tracking_bboxes.max_boxes = (uint8_t)output_tracking_bbox_size;
+      output_tracking_bboxes.num_boxes = 0;
+      nvErr =
+          NvAR_SetObject(keyPointDetectHandle, NvAR_Parameter_Output(TrackingBoundingBoxes), &output_tracking_bboxes, sizeof(NvAR_TrackingBBoxes));
+      BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
   }
   else {
-	  output_bbox_data.assign(25, { 0.f, 0.f, 0.f, 0.f });
-	  output_bbox_conf_data.assign(25, 0.f);
-	  output_bboxes.boxes = output_bbox_data.data();
-	  output_bboxes.max_boxes = (uint8_t)output_bbox_data.size();
-	  output_bboxes.num_boxes = 0;
-	  nvErr = NvAR_SetObject(keyPointDetectHandle, NvAR_Parameter_Output(BoundingBoxes), &output_bboxes, sizeof(NvAR_BBoxes));
-	  BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
+      output_bbox_data.assign(25, { 0.f, 0.f, 0.f, 0.f });
+      output_bbox_conf_data.assign(25, 0.f);
+      output_bboxes.boxes = output_bbox_data.data();
+      output_bboxes.max_boxes = (uint8_t)output_bbox_data.size();
+      output_bboxes.num_boxes = 0;
+      nvErr = NvAR_SetObject(keyPointDetectHandle, NvAR_Parameter_Output(BoundingBoxes), &output_bboxes, sizeof(NvAR_BBoxes));
+      BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter);
 
-	  nvErr = NvAR_SetF32Array(keyPointDetectHandle, NvAR_Parameter_Output(BoundingBoxesConfidence),
-		  output_bbox_conf_data.data(), output_bboxes.max_boxes);
-	  BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter); 
+      nvErr = NvAR_SetF32Array(keyPointDetectHandle, NvAR_Parameter_Output(BoundingBoxesConfidence),
+          output_bbox_conf_data.data(), output_bboxes.max_boxes);
+      BAIL_IF_CVERR(nvErr, err, BodyEngine::Err::errParameter); 
   } 
 #else
   output_bbox_data.assign(25, { 0.f, 0.f, 0.f, 0.f });
@@ -407,7 +407,7 @@ NvAR_TrackingBBoxes* BodyEngine::getTrackingBBoxes() { return &output_tracking_b
    float average_confidence = 0.0f;
    float* keypoints_confidence_all = getKeyPointsConfidence();
    for (int i = 0; i < output_bboxes.num_boxes; i++) {
-	   for (unsigned int j = 0; j < numKeyPoints; j++) {
+       for (unsigned int j = 0; j < numKeyPoints; j++) {
        average_confidence += keypoints_confidence_all[i * numKeyPoints + j];
      }
    }
@@ -483,39 +483,39 @@ unsigned BodyEngine::acquireBodyBoxAndKeyPoints(cv::Mat& src, NvAR_Point2f* refM
 }
 #if NV_MULTI_OBJECT_TRACKER
 unsigned BodyEngine::acquireBodyBoxAndKeyPoints(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Point3f* refKeyPoints3D,
-	NvAR_Quaternion* refJointAngles, NvAR_TrackingBBoxes* refBodyBoxes, int /*variant*/) {
-	unsigned n = 0;
-	NvCVImage fxSrcChunkyCPU;
-	(void)NVWrapperForCVMat(&src, &fxSrcChunkyCPU);
-	NvCV_Status cvErr = NvCVImage_Transfer(&fxSrcChunkyCPU, &inputImageBuffer, 1.0f, stream, &tmpImage);
+    NvAR_Quaternion* refJointAngles, NvAR_TrackingBBoxes* refBodyBoxes, int /*variant*/) {
+    unsigned n = 0;
+    NvCVImage fxSrcChunkyCPU;
+    (void)NVWrapperForCVMat(&src, &fxSrcChunkyCPU);
+    NvCV_Status cvErr = NvCVImage_Transfer(&fxSrcChunkyCPU, &inputImageBuffer, 1.0f, stream, &tmpImage);
 
-	if (NVCV_SUCCESS != cvErr) {
-		return n;
-	}
+    if (NVCV_SUCCESS != cvErr) {
+        return n;
+    }
 #ifdef DEBUG_PERF_RUNTIME
-	auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
 #endif
-	if (findKeyPoints() != NVCV_SUCCESS) return 0;
-	memcpy(refBodyBoxes, getTrackingBBoxes(), sizeof(NvAR_TrackingBBoxes));
-	n = 1;
+    if (findKeyPoints() != NVCV_SUCCESS) return 0;
+    memcpy(refBodyBoxes, getTrackingBBoxes(), sizeof(NvAR_TrackingBBoxes));
+    n = 1;
 #ifdef DEBUG_PERF_RUNTIME
-	auto start2 = std::chrono::high_resolution_clock::now();
+    auto start2 = std::chrono::high_resolution_clock::now();
 #endif
-	memcpy(refMarks, getKeyPoints(), sizeof(NvAR_Point2f) * numKeyPoints * batchSize);
-	memcpy(refKeyPoints3D, getKeyPoints3D(), sizeof(NvAR_Point3f) * numKeyPoints * batchSize);
-	memcpy(refJointAngles, getJointAngles(), sizeof(NvAR_Quaternion) * numKeyPoints * batchSize);
+    memcpy(refMarks, getKeyPoints(), sizeof(NvAR_Point2f) * numKeyPoints * batchSize);
+    memcpy(refKeyPoints3D, getKeyPoints3D(), sizeof(NvAR_Point3f) * numKeyPoints * batchSize);
+    memcpy(refJointAngles, getJointAngles(), sizeof(NvAR_Quaternion) * numKeyPoints * batchSize);
 
 
 #ifdef DEBUG_PERF_RUNTIME
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(start2 - start);
-	std::cout << "[bodypose] run findKeyPoints(): " << duration3.count() << " microseconds" << std::endl;
-	auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end - start2);
-	std::cout << "[bodypose] keypoint copy time: " << duration2.count() << " microseconds" << std::endl;
-	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	std::cout << "[bodypose] end-to-end time: " << duration.count() << " microseconds" << std::endl;
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(start2 - start);
+    std::cout << "[bodypose] run findKeyPoints(): " << duration3.count() << " microseconds" << std::endl;
+    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end - start2);
+    std::cout << "[bodypose] keypoint copy time: " << duration2.count() << " microseconds" << std::endl;
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << "[bodypose] end-to-end time: " << duration.count() << " microseconds" << std::endl;
 #endif
-	return n;
+    return n;
 }
 #endif
 void BodyEngine::setBodyStabilization(bool _bStabilizeBody) { bStabilizeBody = _bStabilizeBody; }
@@ -534,10 +534,10 @@ BodyEngine::Err BodyEngine::setFocalLength(float _bFocalLength) {
 void BodyEngine::useCudaGraph(bool _bUseCudaGraph) { bUseCudaGraph = _bUseCudaGraph; }
 #if NV_MULTI_OBJECT_TRACKER
 void BodyEngine::enablePeopleTracking(bool _bEnablePeopleTracking, unsigned int _shadowTrackingAge, unsigned int _probationAge, unsigned int _maxTargetsTracked) {
-	bEnablePeopleTracking = _bEnablePeopleTracking; 
-	shadowTrackingAge = _shadowTrackingAge;
+    bEnablePeopleTracking = _bEnablePeopleTracking; 
+    shadowTrackingAge = _shadowTrackingAge;
     probationAge = _probationAge;
-	maxTargetsTracked = _maxTargetsTracked;
+    maxTargetsTracked = _maxTargetsTracked;
 }
 #endif
 void BodyEngine::setAppMode(BodyEngine::mode _mode) { appMode = _mode; }

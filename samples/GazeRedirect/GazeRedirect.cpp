@@ -75,7 +75,8 @@
 
 bool FLAG_debug = false, FLAG_verbose = false, FLAG_temporal = true, FLAG_captureOutputs = false,
      FLAG_drawVisualization = true, FLAG_offlineMode = false, FLAG_isNumLandmarks126 = false,
-     FLAG_splitScreenView = true, FLAG_displayLandmarks = false, FLAG_gazeRedirect=true;
+     FLAG_splitScreenView = true, FLAG_displayLandmarks = false, FLAG_gazeRedirect = true, FLAG_useCudaGraph = false;
+;
 std::string FLAG_outDir, FLAG_inFile, FLAG_outFile, FLAG_modelPath, FLAG_landmarks, FLAG_captureCodec = "avc1",
                                                                                     FLAG_camRes = "480";
 unsigned FLAG_camID = 0;
@@ -106,6 +107,7 @@ static void Usage() {
     " --draw_visualization              draw the landmarks, display gaze estimation and head rotation, default to true\n"
     " --redirect_gaze                   redirection of the eyes in addition to estimating gaze, default to true\n"
     "(Default)."
+    " --use_cuda_graph                 use cuda graph to optimize computations "
     " --benchmarks[=<pattern>]          run benchmarks\n");
 }
 
@@ -211,7 +213,8 @@ static int ParseMyArgs(int argc, char **argv) {
         GetFlagArgVal("split_screen_view", arg, &FLAG_splitScreenView) ||
         GetFlagArgVal("temporal", arg, &FLAG_temporal) ||
         GetFlagArgVal("draw_visualization", arg, &FLAG_drawVisualization) ||
-        GetFlagArgVal("redirect_gaze", arg, &FLAG_gazeRedirect))) {
+        GetFlagArgVal("redirect_gaze", arg, &FLAG_gazeRedirect) ||
+        GetFlagArgVal("use_cuda_graph", arg, &FLAG_useCudaGraph))) {
       continue;
     } else if (GetFlagArgVal("help", arg, &help)) {
       Usage();
@@ -312,7 +315,8 @@ class DoApp {
   ~DoApp();
 
   void stop();
-  Err initGazeEngine(const char *modelPath = nullptr, bool isLandmarks126 = false, bool gazeRedirect=true, unsigned eyeSizeSensitivity=3);
+  Err initGazeEngine(const char *modelPath = nullptr, bool isLandmarks126 = false, bool gazeRedirect = true,
+                     unsigned eyeSizeSensitivity = 3, bool useCudaGraph = false);
   Err initCamera(const char *camRes = nullptr, unsigned int camID = 0);
   Err initOfflineMode(const char *inputFilename = nullptr, const char *outputFilename = nullptr);
   Err acquireFrame();
@@ -383,12 +387,14 @@ void DoApp::processKey(int key) {
   }
 }
 
-DoApp::Err DoApp::initGazeEngine(const char *modelPath, bool isNumLandmarks126, bool gazeRedirect, unsigned eyeSizeSensitivity) {
+DoApp::Err DoApp::initGazeEngine(const char *modelPath, bool isNumLandmarks126, bool gazeRedirect,
+                                 unsigned eyeSizeSensitivity, bool useCudaGraph) {
   if (!cap.isOpened()) return errVideo;
 
   int numLandmarkPoints = isNumLandmarks126 ? 126 : 68;
   gaze_ar_engine.setNumLandmarks(numLandmarkPoints);
   gaze_ar_engine.setGazeRedirect(gazeRedirect);
+  gaze_ar_engine.setUseCudaGraph(useCudaGraph);
   gaze_ar_engine.setEyeSizeSensitivity(eyeSizeSensitivity);
   nvErr = gaze_ar_engine.createGazeRedirectionFeature(modelPath);
 
@@ -612,6 +618,15 @@ DoApp::Err DoApp::initCamera(const char *camRes, unsigned int camID) {
       if (inputHeight) cap.set(CV_CAP_PROP_FRAME_HEIGHT, inputHeight);
       inputWidth = (int)cap.get(CV_CAP_PROP_FRAME_WIDTH);
       inputHeight = (int)cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+
+      // openCV API(CAP_PROP_FRAME_WIDTH) to get camera resolution is not always reliable with some cameras
+      cap >> frame;
+      if (frame.empty()) return errCamera;
+      if (inputWidth != frame.cols || inputHeight != frame.rows) {
+        std::cout << "!!! warning: openCV API(CAP_PROP_FRAME_WIDTH/CV_CAP_PROP_FRAME_HEIGHT) to get camera resolution is not trustable. Using the resolution from the actual frame" << std::endl;
+        inputWidth = frame.cols;
+        inputHeight = frame.rows;
+      }
 
       gaze_ar_engine.setInputImageWidth(inputWidth);
       gaze_ar_engine.setInputImageHeight(inputHeight);
@@ -844,7 +859,7 @@ int main(int argc, char **argv) {
   }
   BAIL_IF_ERR(doErr);
 
-  doErr = app.initGazeEngine(FLAG_modelPath.c_str(), FLAG_isNumLandmarks126, FLAG_gazeRedirect, FLAG_eyeSizeSensitivity);
+  doErr = app.initGazeEngine(FLAG_modelPath.c_str(), FLAG_isNumLandmarks126, FLAG_gazeRedirect, FLAG_eyeSizeSensitivity, FLAG_useCudaGraph);
   BAIL_IF_ERR(doErr);
 
   doErr = app.run();

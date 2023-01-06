@@ -40,8 +40,8 @@ public:
     void        (*destroy)(MeshRenderer *han);
     NvCV_Status (*read)(MeshRenderer *han, const char *modelFile);
     NvCV_Status (*init)(MeshRenderer *han, unsigned width, unsigned height, const char *windowName);
-    NvCV_Status (*setCamera)(MeshRenderer *han,
-                          const float locPt[3], const float lookVec[3], const float upVec[3], float vfov);
+    NvCV_Status (*setCamera)(MeshRenderer *han, const float locPt[3], const float lookVec[3], const float upVec[3],
+                             float vfov, float near_z, float far_z);
     NvCV_Status (*render)(MeshRenderer *han,
                           const float exprs[53], const float qrot[4], const float trans[3], NvCVImage *result);
     Dispatch();
@@ -83,8 +83,12 @@ public:
   /// @param[in]  upVec   the 3D vector pointing up. This does not need to be normalized.
   ///                     NULL implies the default up direction, derived from the rest pose of the model.
   /// @param[in]  vfov    the vertical field of view of the camera. Zero implies an orthographic camera.
+  /// @param[in]  near_z  Near z clipping plane. Distance along camera's negative z-axis. If both near_z and far_z are
+  /// 0.0, the z clipping planes are computed based on the mesh bounding box.
+  /// @param[in]  far_z   Far z clipping plane. Distance along camera's negative z-axis. If both near_z and far_z are
+  /// 0.0, the z clipping planes are computed based on the mesh bounding box.
   /// @return     NVCV_SUCCESS  if the camera was initialized successfully.
-  NvCV_Status setCamera(const float locPt[3], const float lookVec[3], const float upVec[3], float vfov);
+  NvCV_Status setCamera(const float locPt[3], const float lookVec[3], const float upVec[3], float vfov, float near_z = 0.0f, float far_z = 0.0f);
 
   /// Render the mesh as deformed by the expression signals.
   /// @param[in]  exprs   the expression signals (53 of them).

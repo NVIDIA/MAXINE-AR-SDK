@@ -598,8 +598,10 @@ void DoApp::DrawLandmarkPoints(const cv::Mat &src, NvAR_Point2f *facial_landmark
   else
     frm = src;
   NvAR_Point2f *pt, *endPt;
+  // Draw larger keypoints if input frame is greater than 720p resolution
+  int circle_radius = (frm.rows <= 720) ? 1 : 2;
   for (endPt = (pt = (NvAR_Point2f *)facial_landmarks) + numLandmarks; pt < endPt; ++pt)
-    cv::circle(frm, cv::Point(lround(pt->x), lround(pt->y)), 1, cv::Scalar(0, 0, 255), -1);
+    cv::circle(frm, cv::Point(lround(pt->x), lround(pt->y)), circle_radius, cv::Scalar(0, 0, 255), -1);
   NvAR_Quaternion *pose = face_ar_engine.getPose();
   if (pose)
     face_ar_engine.DrawPose(frm, pose);
@@ -664,34 +666,36 @@ DoApp::Err DoApp::acquireFaceBox() {
   NvAR_Rect output_bbox;
 
   // get landmarks in  original image resolution coordinate space
-  unsigned n = face_ar_engine.acquireFaceBox(frame, output_bbox, 0);
+  nvErr = face_ar_engine.acquireFaceBox(frame, output_bbox, 0);
 
-  if (n && FLAG_verbose) {
+  if (nvErr==FaceEngine::Err::errNone) {
+    if (FLAG_verbose) {  
     printf("FaceBox: [\n");
     printf("%7.1f%7.1f%7.1f%7.1f\n", output_bbox.x, output_bbox.y, output_bbox.x + output_bbox.width,
            output_bbox.y + output_bbox.height);
     printf("]\n");
-  }
-  if (FLAG_captureOutputs) {
-    writeFrameAndEstResults(frame, face_ar_engine.output_bboxes);
-    writeVideoAndEstResults(frame, face_ar_engine.output_bboxes);
-  }
-
+    }
+  
+    if (FLAG_captureOutputs) {
+      writeFrameAndEstResults(frame, face_ar_engine.output_bboxes);
+      writeVideoAndEstResults(frame, face_ar_engine.output_bboxes);
+    }
+  
 #ifdef VISUALIZE
-  if (n > 0) {                              // At least one face was found
     if (drawVisualization) {
       DrawBBoxes(frame, &output_bbox);      // This will write a frame if in offlineMode 
     }
+#endif  // VISUALIZE
   }
   else {                                    // No faces found
+#ifdef VISUALIZE
     if (FLAG_offlineMode) {
       faceDetectOutputVideo.write(frame);   // This will write a frame if in offlineMode 
     }
-    err = errNoFace;
+#endif  // !VISUALIZE
+  if (nvErr==FaceEngine::Err::errNoFaceDetected) err = errNoFace;
+  else {err = errGeneral;}
   }
-#else  // !VISUALIZE
-  if (0 == n) err = errNoFace;
-#endif  // VISUALIZE
   frameIndex++;
 
   return err;
@@ -704,38 +708,51 @@ DoApp::Err DoApp::acquireFaceBoxAndLandmarks() {
   std::vector<NvAR_Point2f> facial_landmarks(numLandmarks);
 
   // get landmarks in  original image resolution coordinate space
-  unsigned n = face_ar_engine.acquireFaceBoxAndLandmarks(frame, facial_landmarks.data(), output_bbox, 0);
+  nvErr = face_ar_engine.acquireFaceBoxAndLandmarks(frame, facial_landmarks.data(), output_bbox, 0);
 
-  if (n && FLAG_verbose && face_ar_engine.appMode != FaceEngine::mode::faceDetection) {
-    printf("Landmarks: [\n");
-    for (const auto &pt : facial_landmarks) {
-      printf("%7.1f%7.1f\n", pt.x, pt.y);
+  if (nvErr == FaceEngine::Err::errNone)
+  {
+    if (FLAG_verbose && face_ar_engine.appMode != FaceEngine::mode::faceDetection)
+    {
+      printf("Landmarks: [\n");
+      for (const auto &pt : facial_landmarks)
+      {
+        printf("%7.1f%7.1f\n", pt.x, pt.y);
+      }
+      printf("]\n");
     }
-    printf("]\n");
-  }
-  if (FLAG_captureOutputs) {
-    writeFrameAndEstResults(frame, face_ar_engine.output_bboxes, facial_landmarks.data());
-    writeVideoAndEstResults(frame, face_ar_engine.output_bboxes, facial_landmarks.data());
-  }
-
+    if (FLAG_captureOutputs)
+    {
+      writeFrameAndEstResults(frame, face_ar_engine.output_bboxes, facial_landmarks.data());
+      writeVideoAndEstResults(frame, face_ar_engine.output_bboxes, facial_landmarks.data());
+    }
 #ifdef VISUALIZE
-  if (n > 0) {                              // At least one face found
-    if (drawVisualization) {
+    if (drawVisualization)
+    {
       DrawLandmarkPoints(frame, facial_landmarks.data(), numLandmarks); // Writes frame in offline mode
-      if (FLAG_offlineMode) {
-        DrawBBoxes(frame, &output_bbox);    // Writes frame in offline mode
+      if (FLAG_offlineMode)
+      {
+        DrawBBoxes(frame, &output_bbox); // Writes frame in offline mode
       }
     }
+#endif // VISUALIZE
   }
-  else {                                    // No faces found
-    if (FLAG_offlineMode) {
-      faceDetectOutputVideo.write(frame);   // These two wrtite frames if a face was not detected
+  else
+  { // No faces found
+#ifdef VISUALIZE
+    if (FLAG_offlineMode)
+    {
+      faceDetectOutputVideo.write(frame); // These two write frames if a face was not detected
       landMarkOutputVideo.write(frame);
     }
+#endif  // !VISUALIZE
+    if (nvErr == FaceEngine::Err::errNoFaceDetected)
+      err = errNoFace;
+    else
+    {
+      err = errGeneral;
+    }
   }
-#else // !VISUALIZE
-  if (0 == n) err = errNoFace;
-#endif // VISUALIZE
   frameIndex++;
 
   return err;

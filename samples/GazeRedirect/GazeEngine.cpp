@@ -91,6 +91,8 @@ GazeEngine::Err GazeEngine::createGazeRedirectionFeature(const char* modelPath, 
   BAIL_IF_NVERR(nvErr, err, GazeEngine::Err::errParameter);
   nvErr = NvAR_SetCudaStream(gazeRedirectHandle, NvAR_Parameter_Config(CUDAStream), stream);
   BAIL_IF_NVERR(nvErr, err, GazeEngine::Err::errParameter);
+  nvErr = NvAR_SetU32(gazeRedirectHandle, NvAR_Parameter_Config(UseCudaGraph), bUseCudaGraph);
+  BAIL_IF_NVERR(nvErr, err, GazeEngine::Err::errParameter);
   nvErr = NvAR_SetU32(gazeRedirectHandle, NvAR_Parameter_Config(EyeSizeSensitivity), eyeSizeSensitivity);
   BAIL_IF_NVERR(nvErr, err, GazeEngine::Err::errParameter);
   nvErr = NvAR_Load(gazeRedirectHandle);
@@ -435,6 +437,11 @@ void GazeEngine::setFaceStabilization(bool _bStabilizeFace) { bStabilizeFace = _
 void GazeEngine::setGazeRedirect(bool _bGazeRedirect) {
   // If this variable is set, gaze redirection occurs in addition to estimation.
   bGazeRedirect = _bGazeRedirect;
+}
+
+void GazeEngine::setUseCudaGraph(bool _bUseCudaGraph) {
+  // If this variable is set, gaze redirection occurs in addition to estimation.
+  bUseCudaGraph = _bUseCudaGraph;
 }
 
 GazeEngine::Err GazeEngine::setNumLandmarks(int n) {

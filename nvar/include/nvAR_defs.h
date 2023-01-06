@@ -117,20 +117,19 @@ typedef const char* NvAR_FeatureID;
 #define NvAR_Feature_BodyPoseEstimation   "BodyPoseEstimation"     // 
 #define NvAR_Feature_GazeRedirection      "GazeRedirection"        // 
 #define NvAR_Feature_FaceExpressions      "FaceExpressions"        // 
-#define NvAR_Feature_LivePortrait         "LivePortrait"           // 
-#define NvAR_Feature_FrameSelection       "FrameSelection"         // !FrameSelection!
 
 #define NvAR_Parameter_Input(Name) "NvAR_Parameter_Input_" #Name
 #define NvAR_Parameter_Output(Name) "NvAR_Parameter_Output_" #Name
 #define NvAR_Parameter_Config(Name) "NvAR_Parameter_Config_" #Name
 #define NvAR_Parameter_InOut(Name) "NvAR_Parameter_InOut_" #Name
 
-#define NVAR_TEMPORAL_FILTER_FACE_BOX                 (1 << 0)  // 0x001
-#define NVAR_TEMPORAL_FILTER_FACIAL_LANDMARKS         (1 << 1)  // 0x002
-#define NVAR_TEMPORAL_FILTER_FACE_ROTATIONAL_POSE     (1 << 2)  // 0x004
-#define NVAR_TEMPORAL_FILTER_FACIAL_EXPRESSIONS       (1 << 4)  // 0x010
-#define NVAR_TEMPORAL_FILTER_FACIAL_GAZE              (1 << 5)  // 0x020
-#define NVAR_TEMPORAL_FILTER_ENHANCE_EXPRESSIONS      (1 << 8)  // 0x100
+#define NVAR_TEMPORAL_FILTER_FACE_BOX                 (1U << 0)  // 0x001
+#define NVAR_TEMPORAL_FILTER_FACIAL_LANDMARKS         (1U << 1)  // 0x002
+#define NVAR_TEMPORAL_FILTER_FACE_ROTATIONAL_POSE     (1U << 2)  // 0x004
+#define NVAR_TEMPORAL_FILTER_FACIAL_EXPRESSIONS       (1U << 4)  // 0x010
+#define NVAR_TEMPORAL_FILTER_FACIAL_GAZE              (1U << 5)  // 0x020
+#define NVAR_TEMPORAL_FILTER_ENHANCE_EXPRESSIONS      (1U << 8)  // 0x100
+
 
 /*
 Parameters supported by each NvAR_FeatureID
@@ -178,6 +177,7 @@ NvAR_Parameter_Config(CUDAStream) - OPTIONAL                            //
 NvAR_Parameter_Config(Temporal) - OPTIONAL                              // 
 NvAR_Parameter_Config(GazeMode) - OPTIONAL                              // 
 NvAR_Parameter_Config(ModelName) - OPTIONAL                             // 
+NvAR_Parameter_Config(Mode) - OPTIONAL                                  // 
 NvAR_Parameter_Config(GPU) - OPTIONAL                                   // 
 NvAR_Parameter_Config(VertexCount) - QUERY                              // 
 NvAR_Parameter_Config(TriangleCount) - QUERY                            // 
@@ -286,45 +286,20 @@ NvAR_Parameter_Config(ExpressionCount) - QUERY                          //
 Input:                                                                  // 
 NvAR_Parameter_Input(Image)                                             // 
 NvAR_Parameter_Input(Landmarks) - OPTIONAL                              // 
+NvAR_Parameter_Input(PoseMode) - OPTIONAL                               // 
+NvAR_Parameter_Input(CameraIntrinsicParams) - OPTIONAL                  // 
                                                                         // 
 Output:                                                                 // 
 NvAR_Parameter_Output(ExpressionCoefficients)                           // 
 NvAR_Parameter_Output(Landmarks) - OPTIONAL                             // 
 NvAR_Parameter_Output(LandmarksConfidence) - OPTIONAL                   // 
 NvAR_Parameter_Output(Pose) - OPTIONAL                                  // 
+NvAR_Parameter_Output(PoseTranslation) - OPTIONAL                       // 
 NvAR_Parameter_Output(BoundingBoxes) - OPTIONAL                         // 
 NvAR_Parameter_Output(BoundingBoxesConfidence) - OPTIONAL               // 
 
-*******NvAR_Feature_LivePortrait*******                                 // 
-Config:                                                                 // 
-NvAR_Parameter_Config(FeatureDescription)                               // 
-NvAR_Parameter_Config(CUDAStream)                                       // 
-NvAR_Parameter_Config(ModelDir)                                         // 
-NvAR_Parameter_Config(Temporal)                                         // 
-NvAR_Parameter_Config(Mode)                                             // 
-                                                                        // 
-Input:                                                                  // 
-NvAR_Parameter_Input(SourceImage)                                       // 
-NvAR_Parameter_Input(DriveImage)                                        // 
-NvAR_Parameter_Input(BackgroundImage)                                   // 
 
-Output:                                                                 // 
-NvAR_Parameter_Output(GeneratedImage)                                   // 
 
-*******NvAR_Feature_FrameSelection*******                               // !FrameSelection!
-Config:                                                                 // !FrameSelection!
-NvAR_Parameter_Config(FeatureDescription)                               // !FrameSelection!
-NvAR_Parameter_Config(CUDAStream)                                       // !FrameSelection!
-NvAR_Parameter_Config(ModelDir)                                         // !FrameSelection!
-NvAR_Parameter_Config(Mode)                                             // !FrameSelection!
-                                                                        // !FrameSelection!
-Input:                                                                  // !FrameSelection!
-NvAR_Parameter_Input(Image)                                             // !FrameSelection!
-                                                                        // !FrameSelection!
-Output:                                                                 // !FrameSelection!
-NvAR_Parameter_Output(FrameSelected)                                    // !FrameSelection!
 
 */
-
-
 #endif  // NvAR_DEFS_H

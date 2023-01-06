@@ -150,6 +150,7 @@ class GazeEngine {
   void setFaceStabilization(bool);
   Err setNumLandmarks(int);
   void setGazeRedirect(bool _bGazeRedirect);
+  void setUseCudaGraph(bool _bUseCudaGraph);
   void setEyeSizeSensitivity(unsigned);
   int getNumLandmarks() { return numLandmarks; }
   int getNumGazeOutputLandmarks() { return num_output_landmarks; }
@@ -184,12 +185,14 @@ class GazeEngine {
   bool bStabilizeFace;
   bool bUseOTAU;
   bool bGazeRedirect;
+  bool bUseCudaGraph;
   char *fdOTAModelPath, *ldOTAModelPath;
 
   GazeEngine() {
     batchSize = 1;
     bStabilizeFace = true;
     bGazeRedirect = true;
+    bUseCudaGraph = true;
     numLandmarks = LANDMARKS_INFO[0].numPoints;
     num_output_landmarks = 12;
     confidenceThreshold = LANDMARKS_INFO[0].confidence_threshold;

@@ -84,6 +84,7 @@
 #define DEFAULT_CODEC         "avc1"
 #define DEFAULT_FACE_MODEL    "face_model2.nvf"
 #define DEFAULT_RENDER_MODEL  "face_model2.nvf"
+#define NUM_CAMERA_INTRINSIC_PARAMS 3
 
 /********************************************************************************
  * Command-line arguments
@@ -113,6 +114,8 @@ int
                             //| NVAR_TEMPORAL_FILTER_ENHANCE_EXPRESSIONS,
     FLAG_viewMode           = 0xF,                // VIEW_MESH | VIEW_IMAGE | VIEW_PLOT | VIEW_LM
     FLAG_exprMode           = 2,                  // 1=mesh, 2=MLP
+    FLAG_poseMode           = 0,
+    FLAG_cheekPuff          = 0,
     FLAG_gaze               = 0;
 double
     FLAG_fov                = 0.0;                // Orthographic by default
@@ -130,6 +133,8 @@ static void Usage() {
       " --codec=<fourcc>            FOURCC code for the desired codec (default avc1)\n"
       " --debug[=(true|false)]      report debugging info (default false)\n"
       " --expr_mode=<number>        SDK feature used for generation expressions: 1=Face3DReconstruction, 2=FaceExpressions (default 2)\n"
+      " --pose_mode=<number>        Pose mode used for the FaceExpressions feature only: 0:3DOF, 1:6DOF (default 0)\n"
+      " --cheekpuff[=(true|false)]  (Experimental) Enable cheek puff blendshapes (default=false)\n"
       " --face_model=<file>         specify the  face model to be used for fitting (default " DEFAULT_FACE_MODEL ")\n"
       " --filter=<bitfield>         1: face box, 2: landmarks, 4: pose, 16: expressions, 32: gaze,\n"
       "                             256: eye and mouth closure\n"
@@ -266,6 +271,8 @@ static int ParseMyArgs(int argc, char **argv) {
       GetFlagArgVal("codec",        arg, &FLAG_codec)         ||
       GetFlagArgVal("debug",        arg, &FLAG_debug)         ||
       GetFlagArgVal("expr_mode",    arg, &FLAG_exprMode)      ||
+      GetFlagArgVal("pose_mode",    arg, &FLAG_poseMode)      ||
+      GetFlagArgVal("cheekpuff",    arg, &FLAG_cheekPuff)     ||
       GetFlagArgVal("face_model",   arg, &FLAG_fitModel)      ||
       GetFlagArgVal("filter",       arg, &FLAG_filter)        ||
       GetFlagArgVal("gaze",         arg, &FLAG_gaze)          ||
@@ -375,12 +382,14 @@ public:
   NvCV_Status calibrateExpressionWeights();
   NvCV_Status unCalibrateExpressionWeights();
   NvCV_Status normalizeExpressionsWeights();
+  NvCV_Status updateCamera();
   NvCV_Status toggleFaceBoxFiltering();
   NvCV_Status toggleLandmarkFiltering();
   NvCV_Status togglePoseFiltering();
   NvCV_Status toggleExpressionFiltering();
   NvCV_Status toggleGazeFiltering();
   NvCV_Status toggleClosureEnhancement();
+  NvCV_Status togglePoseMode();
   NvCV_Status overlayLandmarks(const float landmarks[126 * 2], unsigned screenHeight, NvCVImage *im);
   void getFPS();
   void drawFPS(cv::Mat& img);
@@ -405,6 +414,7 @@ public:
   NvAR_RenderingParams _renderParams;
   NvCVImage         _srcImg, _compImg, _srcGpu, _renderImg; // wrapper, alloced, alloced, alloced
   Pose              _pose;
+  float             _cameraIntrinsicParams[NUM_CAMERA_INTRINSIC_PARAMS];
   std::string       _inFile, _outFile;
   std::vector<NvAR_Rect> _outputBboxData;
   NvAR_BBoxes        _outputBboxes;
@@ -416,12 +426,15 @@ public:
   unsigned          _videoWidth, _videoHeight, _miniWidth, _miniHeight, _renderWidth, _renderHeight,
                     _plotWidth, _plotHeight, _compWidth, _compHeight, _eigenCount, _exprCount, _landmarkCount,
                     _viewMode, _exprMode, _filtering;
+  unsigned          _poseMode = 0;
+  bool              _enableCheekPuff;
   MeshRendererBroker _broker;
   MeshRenderer      *_renderer = nullptr;
   static const char _windowTitle[], *_exprAbbr[][4], *_sfmExprAbbr[][4];
   MyTimer           _timer;
   bool              _showFPS;
   bool              _performCalibration;
+  bool              _cameraNeedsUpdate;
   double            _frameTime;
   float             _globalExpressionParam;
 #ifdef _ENABLE_UI
@@ -735,6 +748,8 @@ NvCV_Status App::initMLPExpressions() {
     BAIL_IF_ERR(err = NvAR_SetString(_featureHan, NvAR_Parameter_Config(ModelDir), FLAG_modelDir.c_str()));
   BAIL_IF_ERR(err = NvAR_SetCudaStream(_featureHan, NvAR_Parameter_Config(CUDAStream), _stream));
   BAIL_IF_ERR(err = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(Temporal), _filtering));
+  BAIL_IF_ERR(err = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(PoseMode), _poseMode));
+  BAIL_IF_ERR(err = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(EnableCheekPuff), _enableCheekPuff));
   BAIL_IF_ERR(err = NvAR_Load(_featureHan));
   _outputBboxData.assign(25, { 0.f, 0.f, 0.f, 0.f });
   _outputBboxes.boxes = _outputBboxData.data();
@@ -752,7 +767,15 @@ NvCV_Status App::initMLPExpressions() {
   _expressionExponent.resize(_exprCount, 1.0f);
   BAIL_IF_ERR(err = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Output(ExpressionCoefficients), _expressions.data(), _exprCount));
   BAIL_IF_ERR(err = NvAR_SetObject(_featureHan, NvAR_Parameter_Input(Image), &_srcGpu, sizeof(NvCVImage)));
-  BAIL_IF_ERR(err = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(Pose), &_pose, sizeof(NvAR_Quaternion)));
+  // Heuristic for focal length if it is not known
+  _cameraIntrinsicParams[0] = static_cast<float>(_srcGpu.height);         // focal length
+  _cameraIntrinsicParams[1] = static_cast<float>(_srcGpu.width) / 2.0f;   // cx
+  _cameraIntrinsicParams[2] = static_cast<float>(_srcGpu.height) / 2.0f;  // cy
+  BAIL_IF_ERR(err = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Input(CameraIntrinsicParams), _cameraIntrinsicParams,
+                                     NUM_CAMERA_INTRINSIC_PARAMS));
+  BAIL_IF_ERR(err = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(Pose), &_pose.rotation, sizeof(NvAR_Quaternion)));
+  BAIL_IF_ERR(err = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(PoseTranslation), &_pose.translation, sizeof(NvAR_Vector3f)));
+
   _exprMode = EXPR_MODE_MLP;
 
 bail:
@@ -792,6 +815,22 @@ NvCV_Status App::normalizeExpressionsWeights() {
   return NVCV_SUCCESS;
 }
 
+NvCV_Status App::updateCamera() {
+  NvCV_Status err;
+  if (_poseMode == 1) {
+    const NvAR_Vector3f cam_loc = {0, 0, 0};
+    const NvAR_Vector3f cam_dir = {0, 0, -1};
+    const NvAR_Vector3f cam_up = {0, 1, 0};
+    const float focal_length = _cameraIntrinsicParams[0];
+    const float v_fov = focal_length == 0.0f ? 0.0f : 2.0f * atan(_videoHeight / (2 * focal_length));
+    err = _renderer->setCamera(&cam_loc.vec[0], &cam_dir.vec[0], &cam_up.vec[0], v_fov, 0.01f, 1000.0f);
+  } else {
+    err = _renderer->setCamera(nullptr, nullptr, nullptr, 0.0f);
+  }
+  _cameraNeedsUpdate = false;
+  return err;
+}
+
 NvCV_Status App::init() {
   NvCV_Status err;
   std::string path;
@@ -816,9 +855,15 @@ NvCV_Status App::init() {
   _performCalibration = false;
   _frameTime    = 0.f;
   _exprMode     = 0;
+  _poseMode     = FLAG_poseMode;
+  _enableCheekPuff = FLAG_cheekPuff;
   _featureHan   = nullptr;
   _filtering    = FLAG_filter;
   _globalExpressionParam  = 1.0f;
+  _cameraIntrinsicParams[0] = 0.0f;
+  _cameraIntrinsicParams[1] = 0.0f;
+  _cameraIntrinsicParams[2] = 0.0f;
+  _cameraNeedsUpdate = true;
 
   err = _broker.getMeshRendererList(rendererList);
   if (NVCV_SUCCESS != err) {
@@ -855,16 +900,13 @@ NvCV_Status App::init() {
     printf("renderer init: %s\n", NvCV_GetErrorStringFromCode(err));
     return err;
   }
-  err = _renderer->setCamera(nullptr, nullptr, nullptr, (float)(FLAG_fov * D_RADIANS_PER_DEGREE));
-  if (NVCV_SUCCESS != err) {
-    printf("renderer setCamera: %s\n", NvCV_GetErrorStringFromCode(err));
-    return err;
-  }
 
   BAIL_IF_ERR(err = NvCVImage_Alloc(&_srcGpu,    _videoWidth,   _videoHeight, NVCV_BGR,  NVCV_U8, NVCV_CHUNKY, NVCV_GPU, 1));
+  BAIL_IF_ERR(err = NvCVImage_Alloc(&_srcImg,    _videoWidth,   _videoHeight, NVCV_BGR,  NVCV_U8, NVCV_CHUNKY, NVCV_CPU_PINNED, 0));
   BAIL_IF_ERR(err = NvCVImage_Alloc(&_compImg,   _compWidth,   _compHeight,   NVCV_BGR,  NVCV_U8, NVCV_CHUNKY, NVCV_CPU, 0));
   BAIL_IF_ERR(err = NvCVImage_Alloc(&_renderImg, _renderWidth, _renderHeight, NVCV_RGBA, NVCV_U8, NVCV_CHUNKY, NVCV_CPU, 0));
   CVWrapperForNvCVImage(&_compImg, &_ocvDstImg);
+  CVWrapperForNvCVImage(&_srcImg,  &_ocvSrcImg);
   resizeDst();
 
   if (!FLAG_outFile.empty() || !FLAG_show) {
@@ -912,7 +954,6 @@ NvCV_Status App::overlayLandmarks(const float landmarks[126 * 2], unsigned scree
   return NVCV_SUCCESS;
 }
 
-
 NvCV_Status App::run() {
   NvCV_Status err = NVCV_SUCCESS;
   NvCVImage tmpImg, view;
@@ -925,7 +966,6 @@ NvCV_Status App::run() {
       --frameCount;                                         // Account for the wasted frame
       continue;                                             // Read the first frame again
     }
-    NVWrapperForCVMat(&_ocvSrcImg, &_srcImg); // We probably don't need to do this every frame
 
 #ifdef _ENABLE_UI
     unsigned int exprMode = 0;
@@ -986,6 +1026,13 @@ NvCV_Status App::run() {
     BAIL_IF_ERR(err = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _stream, nullptr));
     BAIL_IF_ERR(err = NvAR_Run(_featureHan));
     unsigned isFaceDetected = (_outputBboxes.num_boxes > 0) ? 0xFF : 0;
+    if (_cameraNeedsUpdate) {
+      err = updateCamera();
+      if (NVCV_SUCCESS != err) {
+        printf("renderer setCamera: %s\n", NvCV_GetErrorStringFromCode(err));
+        return err;
+      }
+    }
     if (_performCalibration) {
       calibrateExpressionWeights();
     }
@@ -1003,7 +1050,8 @@ NvCV_Status App::run() {
     }
     if (_viewMode & VIEW_MESH) {
       if (isFaceDetected) {
-        BAIL_IF_ERR(err = _renderer->render(_expressions.data(), &_pose.rotation.x, nullptr, &_renderImg));   // GL _renderImg is upside down
+        float* head_translation = _poseMode == 1 ? &_pose.translation.vec[0] : nullptr;
+        BAIL_IF_ERR(err = _renderer->render(_expressions.data(), &_pose.rotation.x, head_translation, &_renderImg));   // GL _renderImg is upside down
         NvCVImage_InitView(&view, &_compImg, _renderX, _renderY, _renderWidth, _renderHeight);
         NvCVImage_FlipY(&view, &view);  // Since OpenGL renderImg is upside-down, we copy it to a flipped dst
         NvCVImage_Transfer(&_renderImg, &view, 1.0f, _stream, nullptr);  // VFlip RGBA --> BGR
@@ -1047,6 +1095,7 @@ NvCV_Status App::run() {
       case 'E': case CTL('E'):  toggleExpressionFiltering();            break;
       case 'G': case CTL('G'):  toggleGazeFiltering();                  break;
       case 'C': case CTL('C'):  toggleClosureEnhancement();             break;
+      case 'M': case CTL('M'):  togglePoseMode();                       break;
       default:
         if (key < 0) continue;                // No key
         break;                                // Non-mapped key
@@ -1208,6 +1257,13 @@ NvCV_Status App::toggleClosureEnhancement() {
   return err;
 }
 
+NvCV_Status App::togglePoseMode() {
+  _poseMode = !_poseMode;
+  NvCV_Status err = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(PoseMode), _poseMode);
+  if (NVCV_SUCCESS == err) err = NvAR_Load(_featureHan);
+  _cameraNeedsUpdate = true;
+  return err;
+}
 
 /********************************************************************************
  * main

@@ -40,6 +40,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/quaternion.hpp"
+#include <glm/gtc/type_ptr.hpp>
 #include "GLMaterial.h"
 #include "GLMesh.h"
 #include "GLShaders.h"
@@ -305,17 +306,21 @@ public:
   }
 
   void setViewOfBound(const GLMesh::BoundingSphere& bsph, const glm::vec3& lookAt, const glm::vec3& up, float vfov,
-                      float fracFill, float yDir = 1.f) {
+                      float fracFill, float yDir = 1.f, float z_near = 0.0f, float z_far = 0.0f) {
     float r       = bsph.radius() / fracFill,
           aspect  = (float)m_width / (float)m_height,
           signZ   = -yDir,
           dist;
 
-    if (vfov > 0) {   // Perspective
+    if (vfov > 0) {  // Perspective
       dist = r * .5f / tanf(vfov * .5f);
-      m_P = glm::perspective(vfov, aspect, (dist - r) * 0.2f, (dist + r) * 2.0f);
-    }
-    else {          // Orthographic
+      if (z_near == 0.0f && z_far == 0.0f) {
+        // If z_near and z_far are both 0, use default values
+        z_near = (dist - r) * 0.2f;
+        z_far = (dist + r) * 2.0f;
+      }
+      m_P = glm::perspective(vfov, aspect, z_near, z_far);
+    } else {  // Orthographic
       float   w = r,
               h = r;
       if (aspect < 1.f)   h /= aspect;    // Wide
@@ -329,7 +334,7 @@ public:
   }
 
   void setViewOfBound(const GLMesh::BoundingBox& bbox, const glm::vec3& lookAt, const glm::vec3& up, float vfov,
-                      float fracFill, float yDir = 1.f, float yOff = 0.f) {
+                      float fracFill, float yDir = 1.f, float yOff = 0.f, float z_near = 0.0f, float z_far = 0.0f) {
     glm::vec3 boxSize     = bbox.max() - bbox.min();
     glm::vec3 boxCenter   = bbox.center();
     float     borderFrac  = ((1.f - fracFill) / fracFill),
@@ -341,11 +346,15 @@ public:
               signZ       = -yDir,
               dist;
 
-    if (vfov > 0) {   // Perspective
+    if (vfov > 0) {  // Perspective
       dist = r * .5f / tanf(vfov * .5f);
-      m_P = glm::perspective(vfov, aspectWind, dist - r, dist + r);
-    }
-    else {          // Orthographic
+      if (z_near == 0.0f && z_far == 0.0f) {
+        // If z_near and z_far are both 0, use default values
+        z_near = dist - r;
+        z_far = dist + r;
+      }
+      m_P = glm::perspective(vfov, aspectWind, z_near, z_far);
+    } else {  // Orthographic
       if (aspectGeom > aspectWind) dy *= aspectGeom / aspectWind;
       else                         dx *= aspectWind / aspectGeom;
       dist = r * 2.f;
@@ -447,11 +456,11 @@ private:
   static NvCV_Status info(const char **str);
   static NvCV_Status read(MeshRenderer *han, const char *modelFile);
   static NvCV_Status init(MeshRenderer *han, unsigned width, unsigned height, const char *windowName);
-  static NvCV_Status setCamera(MeshRenderer *han,
-                      const float locPt[3], const float lookVec[3], const float upVec[3], float vfov);
+  static NvCV_Status setCamera(MeshRenderer *han, const float locPt[3], const float lookVec[3], const float upVec[3],
+                               float vfov, float near_z = 0.0f, float far_z = 0.0f);
   static NvCV_Status render(MeshRenderer *han,
                       const float exprs[53], const float qrot[4], const float tran[3], NvCVImage *result);
-  NvCV_Status        setFOV(float radians);
+  NvCV_Status        setFOV(float radians, float near_z = 0.0, float far_z = 0.0f);
 };
 
 NvCV_Status OpenGLMeshRenderer_InitDispatch(MeshRenderer::Dispatch *dispatch) {
@@ -575,7 +584,7 @@ NvCV_Status OpenGLMeshRenderer::init(MeshRenderer *han,
   return NVCV_SUCCESS;
 }
 
-NvCV_Status OpenGLMeshRenderer::setFOV(float fov) {
+NvCV_Status OpenGLMeshRenderer::setFOV(float fov, float near_z, float far_z) {
   if (0 == _mesh.numVertices())
     return NVCV_ERR_MODEL;
   GLMesh::BoundingBox bbox;
@@ -583,18 +592,26 @@ NvCV_Status OpenGLMeshRenderer::setFOV(float fov) {
   _ctrRot = bbox.center();
   _ctrRot.y = bbox.min().y;  // Assume that assets are designed with Y-up.
   float vShift = (_mesh.numVertices() > 10000) ? 0.15f : 0.0f;  // Heuristic to determine whether there is a neck
-  _ctx.setViewOfBound(bbox, glm::vec3(0.f, 0.f, -1.f), glm::vec3(0.f, +1.f, 0.f), fov, .9f, +1, vShift);
+  _ctx.setViewOfBound(bbox, glm::vec3(0.f, 0.f, -1.f), glm::vec3(0.f, +1.f, 0.f), fov, .7f, +1, vShift, near_z, far_z);
   return NVCV_SUCCESS;
 }
 
-NvCV_Status OpenGLMeshRenderer::setCamera(MeshRenderer *han,
-    const float locPt[3], const float lookVec[3], const float upVec[3], float vfov) {
-  if (locPt || lookVec || upVec) {}  // We don't accommodate these yet
-  return static_cast<OpenGLMeshRenderer*>(han)->setFOV(vfov);
+NvCV_Status OpenGLMeshRenderer::setCamera(MeshRenderer *han, const float locPt[3], const float lookVec[3],
+                                          const float upVec[3], float vfov, float near_z, float far_z) {
+  if (locPt || lookVec || upVec) {
+    if (!locPt || !lookVec || !upVec || vfov <= 0.0f || (near_z == 0.0f && far_z == 0.0f)) return NVCV_ERR_PARAMETER;
+    auto &ctx = static_cast<OpenGLMeshRenderer *>(han)->_ctx;
+    const float aspect = static_cast<float>(ctx.m_width) / static_cast<float>(ctx.m_height);
+    ctx.m_P = glm::perspective(vfov, aspect, near_z, far_z);
+    ctx.setViewMatrix(glm::lookAt(glm::make_vec3(locPt), glm::make_vec3(lookVec), glm::make_vec3(upVec)));
+    return NVCV_SUCCESS;
+  }
+  // Default to camera based on bounding box if not enough input arguments are provided
+  return static_cast<OpenGLMeshRenderer *>(han)->setFOV(vfov, near_z, far_z);
 }
 
 NvCV_Status OpenGLMeshRenderer::render(MeshRenderer *han,
-    const float exprs[53], const float qrot[4], const float* /*tran*/, NvCVImage *result) {
+    const float exprs[53], const float qrot[4], const float* trans, NvCVImage *result) {
   OpenGLMeshRenderer *ren = static_cast<OpenGLMeshRenderer*>(han);
   NvCV_Status nvErr;
   glm::mat4x4 M;
@@ -606,15 +623,14 @@ NvCV_Status OpenGLMeshRenderer::render(MeshRenderer *han,
   if (qrot) { q.x = qrot[0]; q.y = qrot[1]; q.z = qrot[2]; q.w = qrot[3]; }
   else      { q.x = 0.0f;    q.y = 0.0f;    q.z = 0.0f;    q.w = 1.0f;    }
 
-  #ifndef TRANSLATE_POSE
+  M = glm::mat4_cast(q);
+  if (trans) {
+    M = glm::translate(glm::mat4x4(1.f), *((const glm::vec3 *)(trans))) * M;
+  } else {
     M = glm::translate(glm::mat4x4(1.f), -ren->_ctrRot);
     M = glm::mat4_cast(q) * M;
     M = glm::translate(M, ren->_ctrRot);
-  #else // TRANSLATE_POSE
-    M = glm::mat4_cast(q);
-    if (tran)
-      M = glm::translate(M, *((const glm::vec3*)(trans)));
-  #endif // TRANSLATE_POSE
+  }
 
   nvErr = DeformModel(ren->_sfma.fm, nullptr, exprs, &ren->_mesh);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

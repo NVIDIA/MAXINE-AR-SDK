@@ -154,7 +154,7 @@ class BodyEngine {
       NvAR_Quaternion* refJointAngles, NvAR_BBoxes* refBodyBoxes, int variant = 0);
 #if NV_MULTI_OBJECT_TRACKER
   unsigned acquireBodyBoxAndKeyPoints(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Point3f* refKeyPoints3D,
-	  NvAR_Quaternion* refJointAngles, NvAR_TrackingBBoxes* refBodyBoxes, int variant = 0);
+      NvAR_Quaternion* refJointAngles, NvAR_TrackingBBoxes* refBodyBoxes, int variant = 0);
 #endif
   void setBodyStabilization(bool);
   void setMode(int);
@@ -206,10 +206,10 @@ class BodyEngine {
     bStabilizeBody = true;
     bUseCudaGraph = true;
 #if NV_MULTI_OBJECT_TRACKER
-	bEnablePeopleTracking = false;
-	shadowTrackingAge = 90;
+    bEnablePeopleTracking = false;
+    shadowTrackingAge = 90;
     probationAge = 10;
-	maxTargetsTracked = 30;
+    maxTargetsTracked = 30;
 #endif
     bFocalLength = FOCAL_LENGTH_DEFAULT;
     confidenceThreshold = 0.f;

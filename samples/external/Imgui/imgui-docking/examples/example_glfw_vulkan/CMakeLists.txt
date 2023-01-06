@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 2.8)
 project(imgui_example_glfw_vulkan C CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DVK_PROTOTYPES")

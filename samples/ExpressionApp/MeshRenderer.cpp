@@ -105,8 +105,8 @@ NvCV_Status MeshRenderer::init(unsigned width, unsigned height, const char *wind
 }
 
 
-NvCV_Status MeshRenderer::setCamera(const float locPt[3], const float lookVec[3], const float upVec[3], float vfov) {
-  return m_dispatch.setCamera(this, locPt, lookVec, upVec, vfov);
+NvCV_Status MeshRenderer::setCamera(const float locPt[3], const float lookVec[3], const float upVec[3], float vfov, float z_near, float z_far) {
+  return m_dispatch.setCamera(this, locPt, lookVec, upVec, vfov, z_near, z_far);
 }
 
 

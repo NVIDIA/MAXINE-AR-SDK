@@ -107,7 +107,7 @@ typedef struct LandmarksProperties {
 
 class FaceEngine {
  public:
-  enum Err { errNone, errGeneral, errRun, errInitialization, errRead, errEffect, errParameter };
+  enum Err { errNone, errGeneral, errRun, errInitialization, errRead, errEffect, errParameter, errNoFaceDetected };
   int input_image_width, input_image_height, input_image_pitch;
   const LandmarksProperties LANDMARKS_INFO[2] = {
            { 68,  15.0f }, // number of landmark points, confidence threshold value
@@ -144,9 +144,9 @@ class FaceEngine {
   void releaseLandmarkDetectionIOParams();
   void releaseFaceFittingIOParams();
 
-  unsigned findFaceBoxes();
+  NvCV_Status findFaceBoxes(unsigned &num_boxes);
   NvAR_Rect* getLargestBox();
-  NvCV_Status findLandmarks();
+  FaceEngine::Err findLandmarks();
   NvAR_BBoxes* getBoundingBoxes();
   NvAR_Point2f* getLandmarks();
   NvAR_Quaternion* getPose();
@@ -154,9 +154,9 @@ class FaceEngine {
   float getAverageLandmarksConfidence();
   void enlargeAndSquarifyImageBox(float enlarge, NvAR_Rect& box, int FLAG_variant);
   static void jiggleBox(std::mt19937& ran, float minMag, float maxMag, const NvAR_Rect& cleanBox, NvAR_Rect& noisyBox);
-  unsigned findLargestFaceBox(NvAR_Rect& faceBox, int variant = 0);
-  unsigned acquireFaceBox(cv::Mat& src, NvAR_Rect& faceBox, int variant = 0); 
-  unsigned acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int variant = 0);
+  FaceEngine::Err findLargestFaceBox(NvAR_Rect& faceBox, int variant = 0);
+  FaceEngine::Err acquireFaceBox(cv::Mat& src, NvAR_Rect& faceBox,int variant = 0); 
+  FaceEngine::Err acquireFaceBoxAndLandmarks(cv::Mat& src, NvAR_Point2f* refMarks, NvAR_Rect& faceBox, int variant = 0);
   Err fitFaceModel(cv::Mat& frame);
   NvAR_FaceMesh* getFaceMesh();
   NvAR_RenderingParams* getRenderingParams();

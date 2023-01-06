@@ -1,16 +1,15 @@
-Changelog (v0.8.1.0)
+Changelog (v0.8.2.0)
 --------------------
- - NEW! Eye Contact feature: an AI algorithm to help users keep their gaze engaged in video communication. The feature jointly estimates a user’s gaze direction and redirects it to frontal in video sequences.
- - NEW! Face Expression Estimation (Beta) feature estimates facial expression coefficients From the video or the provided facial landmarks. ExpressionApp is added to demonstrate the new Face Expressions feature.
- - NEW! Default face model for the Face 3D mesh and tracking feature, face_model2.nvf, now ships with the SDK. The old SFM based face_model0.nvf is no longer required.
- - 3D Body Pose Estimation:
-    - NEW! Added the support for Multi Person Tracking. This feature is supported by the Windows SDK only.
-    - FocalLength is now a NvAR_Parameter_Input. Users can now change FocalLength at every NvAR_Run() without having to call NvAR_Load().
-    - The reference pose returned by the feature has been updated
- - Facial landmark estimation
-    - NEW! There are now 2 modalities for facial landmark tracking: {0,1} -> {performance, quality}. Make sure to choose the preferred mode for your application. The default for face mesh fitting and expression estimation are 1, and the others are 0.
-    - Head Pose output from the NvAR_Feature_LandmarkDetection feature is now in the OpenGL convention. Changed from X-back(towards the camera), Y-right, Z-down to X-right, Y-up, Z-back(towards the camera).
-    - The sample apps now show the headpose in the OpenGL convention. The color coding of the axes is  Red - X , Green - Y, Blue - Z
- - NvCVImage_Transfer() now sets alpha to 255 or 1.0f when doing RGB -> RGBA. NvCVImage_CompositeRect() has a premultiplied alpha mode added
- - Migrated to TensorRT 8.4.2.2
- - Migrated to CUDA 11.6u1
+ - Face Expression Estimation
+    - 6DOF head pose now available.
+        - Enable by setting NvAR_Parameter_Config(PoseMode) to 1. Default is 0. 
+        - Get the pose translation using NvAR_Parameter_Output(PoseTranslation). 
+        - Camera intrinsics can be set using NvAR_Parameter_Input(CameraIntrinsicParams).
+    - Expression estimation model updated. The new model is more accurate, and enables subtle expressions such as asymmetric brows, inner/outer brow separation, asymmetric smile and frown, jaw left/right, squint shapes, crossing eye gaze, cheek puff, and more. 
+        - Enable cheek puff shapes by setting NvAR_Parameter_Config(EnableCheekPuff) to 1.
+    - New face model for visualization recommended for FaceExpressions feature. The model has updated blendshapes, and face area partitioning. 
+        - Enable using --render_model=face_model3.nvf in ExpressionApp.
+ - Eye Contact
+    - Performance improvements
+        - CUDA graphs functionality to enable CUDA optimization now available for Eye contact feature. 
+        - Use the parameter NvAR_Parameter_Config(UseCudaGraph) to enable/disable CUDA graphs. Default is OFF
